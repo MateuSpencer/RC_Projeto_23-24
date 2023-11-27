@@ -1,8 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
 #include <arpa/inet.h>
+#include <netdb.h>
+#include <string.h>
 
 #define MAX_BUFFER_SIZE 1024
 #define MAX_FILENAME_SIZE 24
@@ -13,35 +17,105 @@
 // Function declarations
 int createUDPSocket();
 int createTCPSocket();
-void sendUDPMessage(int socket, const char* message, struct sockaddr_in serverAddr);
-void receiveUDPMessage(int socket, char* buffer, struct sockaddr_in* serverAddr);
+void sendUDPMessage(const char* message, char* reply, char* ASPort, char* ASIP);
 void sendTCPMessage(int socket, const char* message);
 void receiveTCPMessage(int socket, char* buffer);
 
-void login(char* UID, char* password, char* ASIP, int ASport);
-void openAuction(char* UID, char* password, char* name, char* asset_fname, int start_value, int timeactive);
-void closeAuction(char* UID, char* password, int AID);
-void myAuctions(char* UID);
-void myBids(char* UID);
-void listAuctions();
-void showAsset(char* UID, char* password, int AID);
-void bid(char* UID, char* password, int AID, int value);
-void showRecord(char* UID, char* password, int AID);
-void logout(char* UID, char* password);
-void unregister(char* UID, char* password);
+void login(char* UID, char* password, char* ASIP, char* ASport);
+void openAuction(char* UID, char* password, char* name, char* asset_fname, int start_value, int timeactive,char* ASIP, char* ASport);
+void closeAuction(char* UID, char* password, int AID, char* ASIP, char* ASport);
+void myAuctions(char* UID, char* ASIP, char* ASPort);
+void myBids(char* UID, char* ASIP, char* ASPort);
+void listAuctions(char* ASIP, char* ASPort);
+void showAsset(int AID, char* ASIP, char* ASport);
+void bid(char* UID, char* password, int AID, int value, char* ASIP, char* ASport);
+void showRecord(int AID, char* ASIP, char* ASPort);
+void logout(char* UID, char* password, char* ASIP, char* ASPort);
+void unregister(char* UID, char* password, char* ASIP, char* ASPort);
 void exitApplication();
 
 int main(int argc, char *argv[]) {
-    // Parse command-line arguments
+    char IP[] = "tejo.tecnico.ulisboa.pt"; 
+    char Port[] = "58011";
+
+    char *UID;
+    char *password;
+
+    // Assume the maximum length of a command is 50 characters
+    char input[50];
 
     // Application loop
     while (1) {
-        // Display menu and get user input
+        printf("Enter a command: ");
+        fgets(input, sizeof(input), stdin);
 
-        // Process user input and call corresponding function
+        // Remove newline character from input
+        input[strcspn(input, "\n")] = '\0';
+
+        // Tokenize the input to extract command and arguments
+        char *token = strtok(input, " ");
+        if (token == NULL) {
+            continue; // Empty input, ask again
+        }
+
+        // Compare command and call the corresponding function
+        if (strcmp(token, "login") == 0) {
+            UID = strtok(NULL, " ");
+            password = strtok(NULL, " ");
+            login(UID, password, IP, Port);
+
+        } else if (strcmp(token, "open") == 0) {
+            char *name = strtok(NULL, " ");
+            char *asset_fname = strtok(NULL, " ");
+            int start_value = atoi(strtok(NULL, " "));
+            int timeactive = atoi(strtok(NULL, " "));
+            openAuction(UID, password, name, asset_fname, start_value, timeactive, IP, Port);
+
+        } else if (strcmp(token, "close") == 0) {
+            int AID = atoi(strtok(NULL, " "));
+            closeAuction(UID, password, AID, IP, Port);
+
+        } else if (strcmp(token, "myauctions") == 0 || strcmp(token, "ma") == 0) {
+            myAuctions(UID, IP, Port);
+
+        } else if (strcmp(token, "mybids") == 0 || strcmp(token, "mb") == 0) {
+            myBids(UID, IP, Port);
+
+        } else if (strcmp(token, "list") == 0 || strcmp(token, "l") == 0) {
+            listAuctions(IP, Port);
+
+        } else if (strcmp(token, "show_asset") == 0 || strcmp(token, "sa") == 0) {
+            int AID = atoi(strtok(NULL, " "));
+            showAsset(AID, IP, Port);
+
+        } else if (strcmp(token, "bid") == 0) {
+            int AID = atoi(strtok(NULL, " "));
+            int value = atoi(strtok(NULL, " "));
+            bid(UID, password, AID, value, IP , Port);
+
+        } else if (strcmp(token, "show_record") == 0 || strcmp(token, "sr") == 0) {
+            int AID = atoi(strtok(NULL, " "));
+            showRecord(AID, IP, Port);
+
+        } else if (strcmp(token, "logout") == 0) {
+            logout(UID, password, IP, Port);
+
+        } else if (strcmp(token, "unregister") == 0) {
+            unregister(UID, password, IP, Port);
+
+        } else if (strcmp(token, "exit") == 0) {
+            exitApplication();
+            break; // Exit the loop and end the program
+
+        } else {
+            printf("Invalid command. Try again.\n");
+        }
     }
 
-    return 0;
+    return 0;    
+
+
+    
 }
 
 // Comunication Functions
@@ -63,22 +137,57 @@ int createTCPSocket() {
     return tcpSocket;
 }
 
-void sendUDPMessage(int socket, const char* message, struct sockaddr_in serverAddr) {
-    ssize_t n = sendto(socket, message, strlen(message), 0, (struct sockaddr*)&serverAddr, sizeof(serverAddr));
-    if (n == -1) {
-        perror("UDP sendto failed");
-        exit(EXIT_FAILURE);
-    }
-}
+void sendUDPMessage(const char* message, char* reply, char* ASPort, char* ASIP) {
+    int fd, errcode;
+    ssize_t n;
+    socklen_t addrlen; // Tamanho do endereço
+    /*
+    hints - Estrutura que contém informações sobre o tipo de conexão que será estabelecida.
+            Podem-se considerar, literalmente, dicas para o sistema operacional sobre como
+            deve ser feita a conexão, de forma a facilitar a aquisição ou preencher dados.
 
-void receiveUDPMessage(int socket, char* buffer, struct sockaddr_in* serverAddr) {
-    socklen_t addrlen = sizeof(*serverAddr);
-    ssize_t n = recvfrom(socket, buffer, MAX_BUFFER_SIZE, 0, (struct sockaddr*)serverAddr, &addrlen);
-    if (n == -1) {
-        perror("UDP recvfrom failed");
-        exit(EXIT_FAILURE);
+    res - Localização onde a função getaddrinfo() armazenará informações sobre o endereço.
+    */
+    struct addrinfo hints, *res;
+    struct sockaddr_in addr;
+    char buffer[128]; // buffer para onde serão escritos os dados recebidos do servidor
+
+    /* Cria um socket UDP (SOCK_DGRAM) para IPv4 (AF_INET).
+    É devolvido um descritor de ficheiro (fd) para onde se deve comunicar. */
+    fd = createUDPSocket();
+
+    /* Preenche a estrutura com 0s e depois atribui a informação já conhecida da ligação */
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_INET;      // IPv4
+    hints.ai_socktype = SOCK_DGRAM; // UDP socket
+
+    /* Busca informação do host "localhost", na porta especificada,
+    guardando a informação nas `hints` e na `res`. Caso o host seja um nome
+    e não um endereço IP (como é o caso), efetua um DNS Lookup. */
+    errcode = getaddrinfo(ASPort, ASIP, &hints, &res);
+    if (errcode != 0) {
+        exit(1);
     }
-    buffer[n] = '\0'; // Null-terminate the received data
+
+    /* Envia para o `fd` (socket) a mensagem "Hello!\n" com o tamanho 7.
+       Não são passadas flags (0), e é passado o endereço de destino.
+       É apenas aqui criada a ligação ao servidor. */
+    n = sendto(fd, message, strlen(message), 0, res->ai_addr, res->ai_addrlen);
+    if (n == -1) {
+        exit(1);
+    }
+
+    /* Recebe 128 Bytes do servidor e guarda-os no buffer.
+       As variáveis `addr` e `addrlen` não são usadas pois não foram inicializadas. */
+    addrlen = sizeof(addr);
+    n = recvfrom(fd, reply, MAX_BUFFER_SIZE, 0, (struct sockaddr *)&addr, &addrlen);
+    if (n == -1) {
+        exit(1);
+    }
+
+    /* Desaloca a memória da estrutura `res` e fecha o socket */
+    freeaddrinfo(res);
+    close(fd);
 }
 
 void sendTCPMessage(int socket, const char* message) {
@@ -99,33 +208,28 @@ void receiveTCPMessage(int socket, char* buffer) {
 }
 
 // User Actions Functions
-void login(char* UID, char* password, char* ASIP, int ASport) {
-    // UDP communication for login
-    int udpSocket = createUDPSocket();
-    struct sockaddr_in serverAddr;
-    memset(&serverAddr, 0, sizeof(serverAddr));
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(ASport);
-    serverAddr.sin_addr.s_addr = inet_addr(ASIP);
-
-    // Prepare login message
+void login(char* UID, char* password, char* ASIP, char* ASPort) {
+    
     char loginMessage[MAX_BUFFER_SIZE];
-    snprintf(loginMessage, sizeof(loginMessage), "LIN %s %s", UID, password);
+    snprintf(loginMessage, sizeof(loginMessage), "LIN %s %s\n", UID, password);
 
-    // Send login message
-    sendUDPMessage(udpSocket, loginMessage, serverAddr);
+    printf("%s", loginMessage);
 
-    // Receive and process the reply
+    //envia mensagem
     char reply[MAX_BUFFER_SIZE];
-    receiveUDPMessage(udpSocket, reply, &serverAddr);
-
+    sendUDPMessage(loginMessage, reply, ASIP, ASPort);
+    printf("%s", reply);
     // Process reply and display results
-    printf("Login Result: %s\n", reply);
-
-    close(udpSocket);
+    if(strcmp(reply, "RLI OK\n") == 0){
+        printf("Login Result: Successful!\n");
+    } else if (strcmp(reply, "RLI NOK\n") == 0){
+        printf("Login Result: Unsuccessful :(\n");
+    } else if(strcmp(reply, "RLI REG\n") == 0){
+        printf("Login Result: User Registered!\n");
+    }
 }
 
-void openAuction(char* UID, char* password, char* name, char* asset_fname, int start_value, int timeactive) {
+void openAuction(char* UID, char* password, char* name, char* asset_fname, int start_value, int timeactive,char* ASIP, char* ASport){
     // TCP communication for opening an auction
     int tcpSocket = createTCPSocket();
     struct sockaddr_in serverAddr;
@@ -157,7 +261,7 @@ void openAuction(char* UID, char* password, char* name, char* asset_fname, int s
     close(tcpSocket);
 }
 
-void closeAuction(char* UID, char* password, int AID) {
+void closeAuction(char* UID, char* password, int AID, char* ASIP, char* ASport) {
     // TCP communication for closing an auction
     int tcpSocket = createTCPSocket();
     struct sockaddr_in serverAddr;
@@ -189,85 +293,65 @@ void closeAuction(char* UID, char* password, int AID) {
     close(tcpSocket);
 }
 
-void myAuctions(char* UID) {
-    // UDP communication for listing auctions started by the user
-    int udpSocket = createUDPSocket();
-    struct sockaddr_in serverAddr;
-    memset(&serverAddr, 0, sizeof(serverAddr));
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(SERVER_PORT); // Replace with the correct server port
-    serverAddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK); // Use loopback address for localhost
+void myAuctions(char* UID, char* ASIP, char* ASPort) {
+    char message[MAX_BUFFER_SIZE];
+    snprintf(message, sizeof(message), "LMA %s\n", UID);
 
-    // Prepare my auctions message
-    char myAuctionsMessage[MAX_BUFFER_SIZE];
-    snprintf(myAuctionsMessage, sizeof(myAuctionsMessage), "LMA %s", UID);
+    printf("%s", message);
 
-    // Send my auctions message
-    sendUDPMessage(udpSocket, myAuctionsMessage, serverAddr);
-
-    // Receive and process the reply
+    //envia mensagem
     char reply[MAX_BUFFER_SIZE];
-    receiveUDPMessage(udpSocket, reply, &serverAddr);
+    sendUDPMessage(message, reply, ASIP, ASPort);
 
     // Process reply and display results
-    printf("My Auctions Result: %s\n", reply);
-
-    close(udpSocket);
+    if (strcmp(reply, "RMA NOK\n") == 0){
+        printf("%s has no auctions\n", UID);
+    } else if(strcmp(reply, "RMA NLG\n") == 0){
+        printf("%s is not logged in.\n", UID);
+    } else {
+        printf("%s's Auctions: %s\n", UID, reply);
+    }
 }
 
-void myBids(char* UID) {
-    // UDP communication for listing auctions with bids by the user
-    int udpSocket = createUDPSocket();
-    struct sockaddr_in serverAddr;
-    memset(&serverAddr, 0, sizeof(serverAddr));
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(SERVER_PORT); // Replace with the correct server port
-    serverAddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK); // Use loopback address for localhost
+void myBids(char* UID, char* ASIP, char* ASPort) {
+    char message[MAX_BUFFER_SIZE];
+    snprintf(message, sizeof(message), "LMB %s\n", UID);
 
-    // Prepare my bids message
-    char myBidsMessage[MAX_BUFFER_SIZE];
-    snprintf(myBidsMessage, sizeof(myBidsMessage), "LMB %s", UID);
+    printf("%s", message);
 
-    // Send my bids message
-    sendUDPMessage(udpSocket, myBidsMessage, serverAddr);
-
-    // Receive and process the reply
+    //envia mensagem
     char reply[MAX_BUFFER_SIZE];
-    receiveUDPMessage(udpSocket, reply, &serverAddr);
+    sendUDPMessage(message, reply, ASIP, ASPort);
 
     // Process reply and display results
-    printf("My Bids Result: %s\n", reply);
-
-    close(udpSocket);
+    if (strcmp(reply, "RMB NOK\n") == 0){
+        printf("%s has no bids.\n", UID);
+    } else if(strcmp(reply, "RMB NLG\n") == 0){
+        printf("%s is not logged in.\n", UID);
+    } else {
+        printf("%s's Bids: %s\n", UID, reply);
+    }
 }
 
-void listAuctions() {
-    // UDP communication for listing all auctions
-    int udpSocket = createUDPSocket();
-    struct sockaddr_in serverAddr;
-    memset(&serverAddr, 0, sizeof(serverAddr));
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(SERVER_PORT); // Replace with the correct server port
-    serverAddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK); // Use loopback address for localhost
+void listAuctions(char* ASIP, char* ASPort) {
+    char message[MAX_BUFFER_SIZE];
+    snprintf(message, sizeof(message), "LST\n");
 
-    // Prepare list auctions message
-    char listAuctionsMessage[MAX_BUFFER_SIZE];
-    snprintf(listAuctionsMessage, sizeof(listAuctionsMessage), "LST");
+    printf("%s", message);
 
-    // Send list auctions message
-    sendUDPMessage(udpSocket, listAuctionsMessage, serverAddr);
-
-    // Receive and process the reply
+    //envia mensagem
     char reply[MAX_BUFFER_SIZE];
-    receiveUDPMessage(udpSocket, reply, &serverAddr);
+    sendUDPMessage(message, reply, ASIP, ASPort);
 
     // Process reply and display results
-    printf("List Auctions Result: %s\n", reply);
-
-    close(udpSocket);
+    if(strcmp(reply, "RLS NOK\n") == 0){
+        printf("No auctions have been started.\n");
+    } else {
+        printf("%s", reply);
+    }
 }
 
-void showAsset(char* UID, char* password, int AID) {
+void showAsset(int AID, char* ASIP, char* ASport) {
     // TCP communication for showing the asset image
     int tcpSocket = createTCPSocket();
     struct sockaddr_in serverAddr;
@@ -314,7 +398,7 @@ void showAsset(char* UID, char* password, int AID) {
     close(tcpSocket);
 }
 
-void bid(char* UID, char* password, int AID, int value) {
+void bid(char* UID, char* password, int AID, int value, char* ASIP, char* ASport){
     // TCP communication for placing a bid
     int tcpSocket = createTCPSocket();
     struct sockaddr_in serverAddr;
@@ -346,82 +430,64 @@ void bid(char* UID, char* password, int AID, int value) {
     close(tcpSocket);
 }
 
-void showRecord(char* UID, char* password, int AID) {
-    // UDP communication for showing the auction record
-    int udpSocket = createUDPSocket();
-    struct sockaddr_in serverAddr;
-    memset(&serverAddr, 0, sizeof(serverAddr));
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(SERVER_PORT); // Replace with the correct server port
-    serverAddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK); // Use loopback address for localhost
+void showRecord(int AID, char* ASIP, char* ASPort) {
+    char message[MAX_BUFFER_SIZE];
+    snprintf(message, sizeof(message), "SRC %d\n", AID);
 
-    // Prepare show record message
-    char showRecordMessage[MAX_BUFFER_SIZE];
-    snprintf(showRecordMessage, sizeof(showRecordMessage), "SRC %s %s %d", UID, password, AID);
+    printf("%s", message);
 
-    // Send show record message
-    sendUDPMessage(udpSocket, showRecordMessage, serverAddr);
-
-    // Receive and process the reply
+    //envia mensagem
     char reply[MAX_BUFFER_SIZE];
-    receiveUDPMessage(udpSocket, reply, &serverAddr);
+    sendUDPMessage(message, reply, ASIP, ASPort);
 
     // Process reply and display results
-    printf("Show Record Result: %s\n", reply);
-
-    close(udpSocket);
+    if(strcmp(reply, "RRC NOK\n") == 0){
+        printf("The auction %d does not exist\n", AID);
+    } else {
+        printf("%s", reply);
+    }
 }
 
-void logout(char* UID, char* password) {
-    // UDP communication for logging out
-    int udpSocket = createUDPSocket();
-    struct sockaddr_in serverAddr;
-    memset(&serverAddr, 0, sizeof(serverAddr));
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(SERVER_PORT); // Replace with the correct server port
-    serverAddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK); // Use loopback address for localhost
+void logout(char* UID, char* password, char* ASIP, char* ASPort) {
+    char message[MAX_BUFFER_SIZE];
+    snprintf(message, sizeof(message), "LOU %s %s\n", UID, password);
 
-    // Prepare logout message
-    char logoutMessage[MAX_BUFFER_SIZE];
-    snprintf(logoutMessage, sizeof(logoutMessage), "LOU %s %s", UID, password);
+    printf("%s", message);
 
-    // Send logout message
-    sendUDPMessage(udpSocket, logoutMessage, serverAddr);
-
-    // Receive and process the reply
+    //envia mensagem
     char reply[MAX_BUFFER_SIZE];
-    receiveUDPMessage(udpSocket, reply, &serverAddr);
+    sendUDPMessage(message, reply, ASIP, ASPort);
+
+    printf("%d", strcmp(reply, "RLO OK\n"));
 
     // Process reply and display results
-    printf("Logout Result: %s\n", reply);
-
-    close(udpSocket);
+    if(strcmp(reply, "RLO OK\n") == 0){
+        printf("Logout Result: Successful!\n");
+    } else if (strcmp(reply, "RLO NOK\n") == 0){
+        printf("Logout Result: Unsuccessful, user is not logged in\n");
+    } else if(strcmp(reply, "RLO UNR\n") == 0){
+        printf("Logout Result: Unrecognized user\n");
+    }
 }
 
-void unregister(char* UID, char* password) {
-    // UDP communication for unregistering the user
-    int udpSocket = createUDPSocket();
-    struct sockaddr_in serverAddr;
-    memset(&serverAddr, 0, sizeof(serverAddr));
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(SERVER_PORT); // Replace with the correct server port
-    serverAddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK); // Use loopback address for localhost
+void unregister(char* UID, char* password, char* ASIP, char* ASPort) {
+    char message[MAX_BUFFER_SIZE];
+    snprintf(message, sizeof(message), "UNR %s %s\n", UID, password);
 
-    // Prepare unregister message
-    char unregisterMessage[MAX_BUFFER_SIZE];
-    snprintf(unregisterMessage, sizeof(unregisterMessage), "UNR %s %s", UID, password);
+    printf("%s", message);
 
-    // Send unregister message
-    sendUDPMessage(udpSocket, unregisterMessage, serverAddr);
-
-    // Receive and process the reply
+    //envia mensagem
     char reply[MAX_BUFFER_SIZE];
-    receiveUDPMessage(udpSocket, reply, &serverAddr);
+    sendUDPMessage(message, reply, ASIP, ASPort);
 
     // Process reply and display results
-    printf("Unregister Result: %s\n", reply);
-
-    close(udpSocket);
+    if(strcmp(reply, "RUR OK\n") == 0){
+        printf("Unregister Result: Successful!\n");
+    } else if (strcmp(reply, "RUR NOK\n") == 0){
+        printf("Unregister Result: Unsuccessful, user is not logged in\n");
+    } else if(strcmp(reply, "RUR UNR\n") == 0){
+        printf("Unregister Result: Unrecognized user\n");
+    }
 }
 
 void exitApplication() {
