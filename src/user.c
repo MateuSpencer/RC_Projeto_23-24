@@ -18,17 +18,16 @@
 int createUDPSocket();
 int createTCPSocket();
 void sendUDPMessage(const char* message, char* reply, char* ASPort, char* ASIP);
-void sendTCPMessage(int socket, const char* message);
-void receiveTCPMessage(int socket, char* buffer);
+void sendTCPMessage(const char* message, char* reply, char* ASPort, char* ASIP);
 
-void login(char* UID, char* password, char* ASIP, char* ASport);
-void openAuction(char* UID, char* password, char* name, char* asset_fname, int start_value, int timeactive,char* ASIP, char* ASport);
-void closeAuction(char* UID, char* password, int AID, char* ASIP, char* ASport);
+void login(char* UID, char* password, char* ASIP, char* ASPort);
+void openAuction(char* UID, char* password, char* name, char* asset_fname, int start_value, int timeactive,char* ASIP, char* ASPort);
+void closeAuction(char* UID, char* password, int AID, char* ASIP, char* ASPort);
 void myAuctions(char* UID, char* ASIP, char* ASPort);
 void myBids(char* UID, char* ASIP, char* ASPort);
 void listAuctions(char* ASIP, char* ASPort);
-void showAsset(int AID, char* ASIP, char* ASport);
-void bid(char* UID, char* password, int AID, int value, char* ASIP, char* ASport);
+void showAsset(int AID, char* ASIP, char* ASPort);
+void bid(char* UID, char* password, int AID, int value, char* ASIP, char* ASPort);
 void showRecord(int AID, char* ASIP, char* ASPort);
 void logout(char* UID, char* password, char* ASIP, char* ASPort);
 void unregister(char* UID, char* password, char* ASIP, char* ASPort);
@@ -104,7 +103,7 @@ int main(int argc, char *argv[]) {
             unregister(UID, password, IP, Port);
 
         } else if (strcmp(token, "exit") == 0) {
-            exitApplication();
+            // TODO : verificar se nao ta loged in
             break; // Exit the loop and end the program
 
         } else {
@@ -113,9 +112,6 @@ int main(int argc, char *argv[]) {
     }
 
     return 0;    
-
-
-    
 }
 
 // Comunication Functions
@@ -150,8 +146,6 @@ void sendUDPMessage(const char* message, char* reply, char* ASPort, char* ASIP) 
     */
     struct addrinfo hints, *res;
     struct sockaddr_in addr;
-    char buffer[128]; // buffer para onde serão escritos os dados recebidos do servidor
-
     /* Cria um socket UDP (SOCK_DGRAM) para IPv4 (AF_INET).
     É devolvido um descritor de ficheiro (fd) para onde se deve comunicar. */
     fd = createUDPSocket();
@@ -161,10 +155,10 @@ void sendUDPMessage(const char* message, char* reply, char* ASPort, char* ASIP) 
     hints.ai_family = AF_INET;      // IPv4
     hints.ai_socktype = SOCK_DGRAM; // UDP socket
 
-    /* Busca informação do host "localhost", na porta especificada,
+    /* Busca informação do host ASPort, na porta especificada,
     guardando a informação nas `hints` e na `res`. Caso o host seja um nome
     e não um endereço IP (como é o caso), efetua um DNS Lookup. */
-    errcode = getaddrinfo(ASPort, ASIP, &hints, &res);
+    errcode = getaddrinfo(ASPort, ASIP, &hints, &res); //TODO ASPort e ASIP nao estao trocados?
     if (errcode != 0) {
         exit(1);
     }
@@ -190,21 +184,50 @@ void sendUDPMessage(const char* message, char* reply, char* ASPort, char* ASIP) 
     close(fd);
 }
 
-void sendTCPMessage(int socket, const char* message) {
-    ssize_t n = write(socket, message, strlen(message));
-    if (n == -1) {
-        perror("TCP write failed");
-        exit(EXIT_FAILURE);
+void sendTCPMessage(const char* message, char* reply, char* ASPort, char* ASIP) {
+    int fd, errcode;
+    ssize_t n;
+    socklen_t addrlen;
+    struct addrinfo hints, *res;
+    struct sockaddr_in addr;
+    /* Cria um socket TCP (SOCK_STREAM) para IPv4 (AF_INET).
+    É devolvido um descritor de ficheiro (fd) para onde se deve comunicar. */
+    fd = createTCPSocket();
+    if (fd == -1) {
+        exit(1);
     }
-}
 
-void receiveTCPMessage(int socket, char* buffer) {
-    ssize_t n = read(socket, buffer, MAX_BUFFER_SIZE - 1);
-    if (n == -1) {
-        perror("TCP read failed");
-        exit(EXIT_FAILURE);
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM; // TCP socket
+
+    errcode = getaddrinfo(ASPort, ASIP, &hints, &res);
+    if (errcode != 0) {
+        exit(1);
     }
-    buffer[n] = '\0'; // Null-terminate the received data
+
+    /* Em TCP é necessário estabelecer uma ligação com o servidor primeiro (Handshake).
+    Então primeiro cria a conexão para o endereço obtido através de `getaddrinfo()`. */
+    n = connect(fd, res->ai_addr, res->ai_addrlen);
+    if (n == -1) {
+        exit(1);
+    }
+
+    /* Escreve a mensagem "Hello!\n" para o servidor, especificando o seu tamanho */
+    n=write(fd, message, strlen(message));
+    if (n == -1) {
+        exit(1);
+    }
+
+    /* Lê 128 Bytes do servidor e guarda-os no buffer. */
+    n=read(fd, reply, 128);
+    if (n == -1) {
+        exit(1);
+    }
+
+    /* Desaloca a memória da estrutura `res` e fecha o socket */
+    freeaddrinfo(res);
+    close(fd);
 }
 
 // User Actions Functions
@@ -229,68 +252,34 @@ void login(char* UID, char* password, char* ASIP, char* ASPort) {
     }
 }
 
-void openAuction(char* UID, char* password, char* name, char* asset_fname, int start_value, int timeactive,char* ASIP, char* ASport){
-    // TCP communication for opening an auction
-    int tcpSocket = createTCPSocket();
-    struct sockaddr_in serverAddr;
-    memset(&serverAddr, 0, sizeof(serverAddr));
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(SERVER_PORT); // Replace with the correct server port
-    serverAddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK); // Use loopback address for localhost
-
-    // Connect to the server
-    if (connect(tcpSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == -1) {
-        perror("TCP connect failed");
-        exit(EXIT_FAILURE);
-    }
-
+void openAuction(char* UID, char* password, char* name, char* asset_fname, int start_value, int timeactive,char* ASIP, char* ASPort){
     // Prepare open auction message
     char openAuctionMessage[MAX_BUFFER_SIZE];
     snprintf(openAuctionMessage, sizeof(openAuctionMessage), "OPA %s %s %s %d %d", UID, password, name, start_value, timeactive);
 
     // Send open auction message
-    sendTCPMessage(tcpSocket, openAuctionMessage);
-
-    // Receive and process the reply
     char reply[MAX_BUFFER_SIZE];
-    receiveTCPMessage(tcpSocket, reply);
+    sendTCPMessage(openAuctionMessage, reply, ASIP, ASPort);
 
     // Process reply and display results
     printf("Open Auction Result: %s\n", reply);
 
-    close(tcpSocket);
+    // TODO
+
 }
 
-void closeAuction(char* UID, char* password, int AID, char* ASIP, char* ASport) {
-    // TCP communication for closing an auction
-    int tcpSocket = createTCPSocket();
-    struct sockaddr_in serverAddr;
-    memset(&serverAddr, 0, sizeof(serverAddr));
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(SERVER_PORT); // Replace with the correct server port
-    serverAddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK); // Use loopback address for localhost
-
-    // Connect to the server
-    if (connect(tcpSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == -1) {
-        perror("TCP connect failed");
-        exit(EXIT_FAILURE);
-    }
-
+void closeAuction(char* UID, char* password, int AID, char* ASIP, char* ASPort) {
     // Prepare close auction message
     char closeAuctionMessage[MAX_BUFFER_SIZE];
     snprintf(closeAuctionMessage, sizeof(closeAuctionMessage), "CLS %s %s %d", UID, password, AID);
-
+    
     // Send close auction message
-    sendTCPMessage(tcpSocket, closeAuctionMessage);
-
-    // Receive and process the reply
     char reply[MAX_BUFFER_SIZE];
-    receiveTCPMessage(tcpSocket, reply);
-
+    sendTCPMessage(closeAuctionMessage, reply, ASIP, ASPort);
     // Process reply and display results
     printf("Close Auction Result: %s\n", reply);
 
-    close(tcpSocket);
+    //TODO
 }
 
 void myAuctions(char* UID, char* ASIP, char* ASPort) {
@@ -351,31 +340,14 @@ void listAuctions(char* ASIP, char* ASPort) {
     }
 }
 
-void showAsset(int AID, char* ASIP, char* ASport) {
-    // TCP communication for showing the asset image
-    int tcpSocket = createTCPSocket();
-    struct sockaddr_in serverAddr;
-    memset(&serverAddr, 0, sizeof(serverAddr));
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(SERVER_PORT); // Replace with the correct server port
-    serverAddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK); // Use loopback address for localhost
-
-    // Connect to the server
-    if (connect(tcpSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == -1) {
-        perror("TCP connect failed");
-        exit(EXIT_FAILURE);
-    }
-
+void showAsset(int AID, char* ASIP, char* ASPort) {
     // Prepare show asset message
     char showAssetMessage[MAX_BUFFER_SIZE];
     snprintf(showAssetMessage, sizeof(showAssetMessage), "SAS %d", AID);
 
-    // Send show asset message
-    sendTCPMessage(tcpSocket, showAssetMessage);
-
-    // Receive and process the reply
     char reply[MAX_BUFFER_SIZE];
-    receiveTCPMessage(tcpSocket, reply);
+    sendTCPMessage(showAssetMessage, reply, ASIP, ASPort);
+    //TODO
 
     // Process reply and display results
     if (strncmp(reply, "RSA OK", 6) == 0) {
@@ -394,40 +366,19 @@ void showAsset(int AID, char* ASIP, char* ASport) {
     } else {
         printf("Show Asset Result: %s\n", reply);
     }
-
-    close(tcpSocket);
 }
 
-void bid(char* UID, char* password, int AID, int value, char* ASIP, char* ASport){
-    // TCP communication for placing a bid
-    int tcpSocket = createTCPSocket();
-    struct sockaddr_in serverAddr;
-    memset(&serverAddr, 0, sizeof(serverAddr));
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(SERVER_PORT); // Replace with the correct server port
-    serverAddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK); // Use loopback address for localhost
-
-    // Connect to the server
-    if (connect(tcpSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == -1) {
-        perror("TCP connect failed");
-        exit(EXIT_FAILURE);
-    }
-
+void bid(char* UID, char* password, int AID, int value, char* ASIP, char* ASPort){
     // Prepare bid message
     char bidMessage[MAX_BUFFER_SIZE];
     snprintf(bidMessage, sizeof(bidMessage), "BID %s %s %d %d", UID, password, AID, value);
 
-    // Send bid message
-    sendTCPMessage(tcpSocket, bidMessage);
-
-    // Receive and process the reply
     char reply[MAX_BUFFER_SIZE];
-    receiveTCPMessage(tcpSocket, reply);
+    sendTCPMessage(bidMessage, reply, ASIP, ASPort);
 
     // Process reply and display results
     printf("Bid Result: %s\n", reply);
-
-    close(tcpSocket);
+    // TODO
 }
 
 void showRecord(int AID, char* ASIP, char* ASPort) {
@@ -488,8 +439,4 @@ void unregister(char* UID, char* password, char* ASIP, char* ASPort) {
     } else if(strcmp(reply, "RUR UNR\n") == 0){
         printf("Unregister Result: Unrecognized user\n");
     }
-}
-
-void exitApplication() {
-    // Implementation
 }
