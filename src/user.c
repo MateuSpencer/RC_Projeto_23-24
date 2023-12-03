@@ -8,17 +8,7 @@
 #include <netdb.h>
 #include <string.h>
 
-#define MAX_BUFFER_SIZE 1024
-#define MAX_FILENAME_SIZE 24
-#define MAX_PASSWORD_SIZE 9
-#define SERVER_PORT 58000
-
-
-// Function declarations
-int createUDPSocket();
-int createTCPSocket();
-void sendUDPMessage(const char* message, char* reply, char* ASPort, char* ASIP);
-void sendTCPMessage(const char* message, char* reply, char* ASPort, char* ASIP);
+#include "communication.h"
 
 void login(char* UID, char* password, char* ASIP, char* ASPort);
 void openAuction(char* UID, char* password, char* name, char* asset_fname, int start_value, int timeactive,char* ASIP, char* ASPort);
@@ -34,14 +24,27 @@ void unregister(char* UID, char* password, char* ASIP, char* ASPort);
 void exitApplication();
 
 int main(int argc, char *argv[]) {
-    char IP[] = "tejo.tecnico.ulisboa.pt"; 
-    char Port[] = "58011";
+    char ASIP[50]; 
+    char ASport[6];
 
     char *UID;
     char *password;
 
-    // Assume the maximum length of a command is 50 characters
     char input[50];
+
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-n") == 0 && i + 1 < argc) {
+            strncpy(ASIP, argv[i + 1], sizeof(ASIP) - 1);
+            ASIP[sizeof(ASIP) - 1] = '\0';
+            i++;
+        } else if (strcmp(argv[i], "-p") == 0 && i + 1 < argc) {
+            strncpy(ASport, argv[i + 1], sizeof(ASport) - 1);
+            ASport[sizeof(ASport) - 1] = '\0';
+            i++;
+        }
+    }
+
+
 
     // Application loop
     while (1) {
@@ -61,46 +64,46 @@ int main(int argc, char *argv[]) {
         if (strcmp(token, "login") == 0) {
             UID = strtok(NULL, " ");
             password = strtok(NULL, " ");
-            login(UID, password, IP, Port);
+            login(UID, password, ASIP, ASport);
 
         } else if (strcmp(token, "open") == 0) {
             char *name = strtok(NULL, " ");
             char *asset_fname = strtok(NULL, " ");
             int start_value = atoi(strtok(NULL, " "));
             int timeactive = atoi(strtok(NULL, " "));
-            openAuction(UID, password, name, asset_fname, start_value, timeactive, IP, Port);
+            openAuction(UID, password, name, asset_fname, start_value, timeactive, ASIP, ASport);
 
         } else if (strcmp(token, "close") == 0) {
             int AID = atoi(strtok(NULL, " "));
-            closeAuction(UID, password, AID, IP, Port);
+            closeAuction(UID, password, AID, ASIP, ASport);
 
         } else if (strcmp(token, "myauctions") == 0 || strcmp(token, "ma") == 0) {
-            myAuctions(UID, IP, Port);
+            myAuctions(UID, ASIP, ASport);
 
         } else if (strcmp(token, "mybids") == 0 || strcmp(token, "mb") == 0) {
-            myBids(UID, IP, Port);
+            myBids(UID, ASIP, ASport);
 
         } else if (strcmp(token, "list") == 0 || strcmp(token, "l") == 0) {
-            listAuctions(IP, Port);
+            listAuctions(ASIP, ASport);
 
         } else if (strcmp(token, "show_asset") == 0 || strcmp(token, "sa") == 0) {
             int AID = atoi(strtok(NULL, " "));
-            showAsset(AID, IP, Port);
+            showAsset(AID, ASIP, ASport);
 
         } else if (strcmp(token, "bid") == 0) {
             int AID = atoi(strtok(NULL, " "));
             int value = atoi(strtok(NULL, " "));
-            bid(UID, password, AID, value, IP , Port);
+            bid(UID, password, AID, value, ASIP , ASport);
 
         } else if (strcmp(token, "show_record") == 0 || strcmp(token, "sr") == 0) {
             int AID = atoi(strtok(NULL, " "));
-            showRecord(AID, IP, Port);
+            showRecord(AID, ASIP, ASport);
 
         } else if (strcmp(token, "logout") == 0) {
-            logout(UID, password, IP, Port);
+            logout(UID, password, ASIP, ASport);
 
         } else if (strcmp(token, "unregister") == 0) {
-            unregister(UID, password, IP, Port);
+            unregister(UID, password, ASIP, ASport);
 
         } else if (strcmp(token, "exit") == 0) {
             // TODO : verificar se nao ta loged in
@@ -112,122 +115,6 @@ int main(int argc, char *argv[]) {
     }
 
     return 0;    
-}
-
-// Comunication Functions
-int createUDPSocket() {
-    int udpSocket = socket(AF_INET, SOCK_DGRAM, 0);
-    if (udpSocket == -1) {
-        perror("UDP socket creation failed");
-        exit(EXIT_FAILURE);
-    }
-    return udpSocket;
-}
-
-int createTCPSocket() {
-    int tcpSocket = socket(AF_INET, SOCK_STREAM, 0);
-    if (tcpSocket == -1) {
-        perror("TCP socket creation failed");
-        exit(EXIT_FAILURE);
-    }
-    return tcpSocket;
-}
-
-void sendUDPMessage(const char* message, char* reply, char* ASPort, char* ASIP) {
-    int fd, errcode;
-    ssize_t n;
-    socklen_t addrlen; // Tamanho do endereço
-    /*
-    hints - Estrutura que contém informações sobre o tipo de conexão que será estabelecida.
-            Podem-se considerar, literalmente, dicas para o sistema operacional sobre como
-            deve ser feita a conexão, de forma a facilitar a aquisição ou preencher dados.
-
-    res - Localização onde a função getaddrinfo() armazenará informações sobre o endereço.
-    */
-    struct addrinfo hints, *res;
-    struct sockaddr_in addr;
-    /* Cria um socket UDP (SOCK_DGRAM) para IPv4 (AF_INET).
-    É devolvido um descritor de ficheiro (fd) para onde se deve comunicar. */
-    fd = createUDPSocket();
-
-    /* Preenche a estrutura com 0s e depois atribui a informação já conhecida da ligação */
-    memset(&hints, 0, sizeof hints);
-    hints.ai_family = AF_INET;      // IPv4
-    hints.ai_socktype = SOCK_DGRAM; // UDP socket
-
-    /* Busca informação do host ASPort, na porta especificada,
-    guardando a informação nas `hints` e na `res`. Caso o host seja um nome
-    e não um endereço IP (como é o caso), efetua um DNS Lookup. */
-    errcode = getaddrinfo(ASPort, ASIP, &hints, &res); //TODO ASPort e ASIP nao estao trocados?
-    if (errcode != 0) {
-        exit(1);
-    }
-
-    /* Envia para o `fd` (socket) a mensagem "Hello!\n" com o tamanho 7.
-       Não são passadas flags (0), e é passado o endereço de destino.
-       É apenas aqui criada a ligação ao servidor. */
-    n = sendto(fd, message, strlen(message), 0, res->ai_addr, res->ai_addrlen);
-    if (n == -1) {
-        exit(1);
-    }
-
-    /* Recebe 128 Bytes do servidor e guarda-os no buffer.
-       As variáveis `addr` e `addrlen` não são usadas pois não foram inicializadas. */
-    addrlen = sizeof(addr);
-    n = recvfrom(fd, reply, MAX_BUFFER_SIZE, 0, (struct sockaddr *)&addr, &addrlen);
-    if (n == -1) {
-        exit(1);
-    }
-
-    /* Desaloca a memória da estrutura `res` e fecha o socket */
-    freeaddrinfo(res);
-    close(fd);
-}
-
-void sendTCPMessage(const char* message, char* reply, char* ASPort, char* ASIP) {
-    int fd, errcode;
-    ssize_t n;
-    socklen_t addrlen;
-    struct addrinfo hints, *res;
-    struct sockaddr_in addr;
-    /* Cria um socket TCP (SOCK_STREAM) para IPv4 (AF_INET).
-    É devolvido um descritor de ficheiro (fd) para onde se deve comunicar. */
-    fd = createTCPSocket();
-    if (fd == -1) {
-        exit(1);
-    }
-
-    memset(&hints, 0, sizeof hints);
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM; // TCP socket
-
-    errcode = getaddrinfo(ASPort, ASIP, &hints, &res);
-    if (errcode != 0) {
-        exit(1);
-    }
-
-    /* Em TCP é necessário estabelecer uma ligação com o servidor primeiro (Handshake).
-    Então primeiro cria a conexão para o endereço obtido através de `getaddrinfo()`. */
-    n = connect(fd, res->ai_addr, res->ai_addrlen);
-    if (n == -1) {
-        exit(1);
-    }
-
-    /* Escreve a mensagem "Hello!\n" para o servidor, especificando o seu tamanho */
-    n=write(fd, message, strlen(message));
-    if (n == -1) {
-        exit(1);
-    }
-
-    /* Lê 128 Bytes do servidor e guarda-os no buffer. */
-    n=read(fd, reply, 128);
-    if (n == -1) {
-        exit(1);
-    }
-
-    /* Desaloca a memória da estrutura `res` e fecha o socket */
-    freeaddrinfo(res);
-    close(fd);
 }
 
 // User Actions Functions
