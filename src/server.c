@@ -72,7 +72,7 @@ void handleUDPRequests(char* ASPort) {
     struct addrinfo hints, *res;
     struct sockaddr_in addr;
     char buffer[128];
-    char* response;
+    char response[MAX_BUFFER_SIZE];  // Assuming MAX_BUFFER_SIZE is defined
 
     fd = createUDPSocket();
 
@@ -128,7 +128,11 @@ void handleUDPRequests(char* ASPort) {
             *response = strdup("Unknown action"); //TODO
         }
 
-        //sendUDPMessage(response, reply, ASIP, ASPort); TODO
+        /* Envia a resposta para o endereço `addr` de onde foram recebidos dados */
+        n = sendto(fd, response, sizeof(response), 0, (struct sockaddr *)&addr, addrlen);
+        if (n == -1) {
+            exit(1);
+        }
     }
 
     close(fd);
@@ -141,6 +145,7 @@ void handleTCPRequests(char* ASPort) {
     struct addrinfo hints, *res;
     struct sockaddr_in addr;
     char buffer[128];
+    char response[MAX_BUFFER_SIZE];  // Assuming MAX_BUFFER_SIZE is defined
 
     fd = createTCPSocket();
 
@@ -181,8 +186,28 @@ void handleTCPRequests(char* ASPort) {
             exit(EXIT_FAILURE);
         }
 
-        //TODO
+        char* action = strtok(buffer, " ");
 
+        // Identify the type of request and call the appropriate handler function
+        if (strcmp(action, "LIN") == 0) {
+            handleLoginRequest(buffer, response);
+        } else if (strcmp(action, "OPA") == 0) {
+            handleOpenAuctionRequest(buffer, response);
+        } else if (strcmp(action, "CLS") == 0) {
+            handleCloseAuctionRequest(buffer, response);
+        } else if (strcmp(action, "SAS") == 0) {
+            handleShowAssetRequest(buffer, response);
+        } else if (strcmp(action, "BID") == 0) {
+            handleBidRequest(buffer, response);
+        } else {
+            snprintf(response, sizeof(response), "Unknown action"); //TODO
+        }
+
+        /* Envia a response para a socket */
+        n = write(newfd, response, sizeof(response));
+        if (n == -1) {
+            exit(1);
+        }
         close(newfd);
     }
 
@@ -218,7 +243,7 @@ void removeFile(const char* filePath) {
 
 void createUserDirectory(const char* UID) {
     char userDir[50];
-    snprintf(userDir, sizeof(userDir), "USERS/%s", UID);
+    snprintf(userDir, sizeof(userDir), "AS/USERS/%s", UID);
     createDirectory(userDir);
 
     createFile(userDir, "pass.txt");
@@ -230,7 +255,7 @@ void createUserDirectory(const char* UID) {
 
 void createAuctionDirectory(int AID, const char* name, const char* asset_fname, int start_value, int timeactive) {
     char auctionDir[50];
-    snprintf(auctionDir, sizeof(auctionDir), "AUCTIONS/%d", AID);
+    snprintf(auctionDir, sizeof(auctionDir), "AS/AUCTIONS/%d", AID);
     createDirectory(auctionDir);
 
     createFile(auctionDir, "START.txt");
@@ -244,23 +269,168 @@ void createAuctionDirectory(int AID, const char* name, const char* asset_fname, 
 
 void closeAuctionDirectory(int AID) {
     char auctionDir[50];
-    snprintf(auctionDir, sizeof(auctionDir), "AUCTIONS/%d", AID);
+    snprintf(auctionDir, sizeof(auctionDir), "AS/AUCTIONS/%d", AID);
 
     createFile(auctionDir, "END.txt");
 }
 
 void addBid(const char* UID, int AID, int value) {
     char bidFile[50];
-    snprintf(bidFile, sizeof(bidFile), "AUCTIONS/%d/BIDS/%06d", AID, value);
+    snprintf(bidFile, sizeof(bidFile), "AS/AUCTIONS/%d/BIDS/%06d", AID, value);
     createFile(bidFile, "");
 }
 
 void unregisterUser(const char* UID) {
     char passFile[50];
-    snprintf(passFile, sizeof(passFile), "USERS/%s/pass.txt", UID);
+    snprintf(passFile, sizeof(passFile), "AS/USERS/%s/pass.txt", UID);
     removeFile(passFile);
 
     char loginFile[50];
-    snprintf(loginFile, sizeof(loginFile), "USERS/%s/login.txt", UID);
+    snprintf(loginFile, sizeof(loginFile), "AS/USERS/%s/login.txt", UID);
     removeFile(loginFile);
+}
+
+// Include necessary headers
+
+void handleLoginRequest(char* request, char* response) {
+    char* UID = strtok(NULL, " ");
+    char* password = strtok(NULL, " ");
+
+    // TODO: Check if UID and password are valid
+    if (/* UID and password are valid */) {
+        createUserDirectory(UID);
+        strcpy(response, "RLI OK");
+    } else {
+        strcpy(response, "RLI NOK");
+    }
+}
+
+void handleOpenAuctionRequest(char* request, char* response) {
+    char* UID = strtok(NULL, " ");
+    char* password = strtok(NULL, " ");
+    char* name = strtok(NULL, " ");
+    char* start_value_str = strtok(NULL, " ");
+    char* timeactive_str = strtok(NULL, " ");
+    char* Fname = strtok(NULL, " ");
+    char* Fsize_str = strtok(NULL, " ");
+    char* Fdata = strtok(NULL, " ");
+
+    int start_value = atoi(start_value_str);
+    int timeactive = atoi(timeactive_str);
+    int Fsize = atoi(Fsize_str);
+
+    // TODO: Check if UID and password are valid
+    if (/* UID and password are valid */) {
+        // TODO: Generate AID and create auction directory
+        createAuctionDirectory(AID, name, Fname, start_value, timeactive);
+        strcpy(response, "ROA OK [AID]");
+    } else {
+        strcpy(response, "ROA NOK");
+    }
+}
+
+void handleCloseAuctionRequest(char* request, char* response) {
+    char* UID = strtok(NULL, " ");
+    char* password = strtok(NULL, " ");
+    char* AID_str = strtok(NULL, " ");
+
+    int AID = atoi(AID_str);
+
+    // TODO: Check if UID and password are valid
+    if (/* UID and password are valid */) {
+        // TODO: Close the auction directory
+        closeAuctionDirectory(AID);
+        strcpy(response, "RCL OK");
+    } else {
+        strcpy(response, "RCL NOK");
+    }
+}
+
+void handleMyAuctionsRequest(char* request, char* response) {
+    char* UID = strtok(NULL, " ");
+
+    // TODO: Check if UID is valid
+    if (/* UID is valid */) {
+        // TODO: Implement logic to get a list of user's auctions
+        strcpy(response, "RMA OK [AID state]*");
+    } else {
+        strcpy(response, "RMA NOK");
+    }
+}
+
+void handleMyBidsRequest(char* request, char* response) {
+    char* UID = strtok(NULL, " ");
+
+    // TODO: Check if UID is valid
+    if (/* UID is valid */) {
+        // TODO: Implement logic to get a list of user's bids
+        strcpy(response, "RMB OK [AID state]*");
+    } else {
+        strcpy(response, "RMB NOK");
+    }
+}
+
+void handleListAuctionsRequest(char** response) {
+    // TODO: Implement logic to get a list of all auctions
+    strcpy(*response, "RLS OK [AID state]*");
+}
+
+void handleShowAssetRequest(char* request, char* response) {
+    char* AID_str = strtok(NULL, " ");
+    int AID = atoi(AID_str);
+
+    // TODO: Implement logic to send the asset file
+    strcpy(response, "RSA OK [Fname Fsize Fdata]");
+}
+
+void handleBidRequest(char* request, char* response) {
+    char* UID = strtok(NULL, " ");
+    char* password = strtok(NULL, " ");
+    char* AID_str = strtok(NULL, " ");
+    char* value_str = strtok(NULL, " ");
+
+    int AID = atoi(AID_str);
+    int value = atoi(value_str);
+
+    // TODO: Check if UID and password are valid
+    if (/* UID and password are valid */) {
+        // TODO: Implement logic to place a bid
+        strcpy(response, "RBD OK");
+    } else {
+        strcpy(response, "RBD NOK");
+    }
+}
+
+void handleShowRecordRequest(char* request, char* response) {
+    char* AID_str = strtok(NULL, " ");
+    int AID = atoi(AID_str);
+
+    // TODO: Implement logic to get the auction record
+    strcpy(response, "RRC OK [host_UID auction_name asset_fname start_value start_date-time timeactive] [B bidder_UID bid_value bid_date-time bid_sec_time]* [E end_date-time end_sec_time]");
+}
+
+void handleLogoutRequest(char* request, char* response) {
+    char* UID = strtok(NULL, " ");
+    char* password = strtok(NULL, " ");
+
+    // TODO: Check if UID and password are valid
+    if (/* UID and password are valid */) {
+        // TODO: Implement logic to logout the user
+        strcpy(response, "RLO OK");
+    } else {
+        strcpy(response, "RLO NOK");
+    }
+}
+
+void handleUnregisterRequest(char* request, char* response) {
+    char* UID = strtok(NULL, " ");
+    char* password = strtok(NULL, " ");
+
+    // TODO: Check if UID and password are valid
+    if (/* UID and password are valid */) {
+        // TODO: Implement logic to unregister the user
+        strcpy(response, "RUN OK");
+    } else {
+        strcpy(response, "RUN NOK");
+    }
 }
