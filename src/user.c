@@ -27,9 +27,6 @@ int main(int argc, char *argv[]) {
     char ASIP[50]; 
     char ASport[6];
 
-    char *UID;
-    char *password;
-
     char input[50];
 
     for (int i = 1; i < argc; i++) {
@@ -48,22 +45,16 @@ int main(int argc, char *argv[]) {
 
     // Application loop
     while (1) {
-        printf("Enter a command: ");
-        fgets(input, sizeof(input), stdin);
+        char token[50];
+        char UID[7];
+        char password[9];
 
-        // Remove newline character from input
-        input[strcspn(input, "\n")] = '\0';
-
-        // Tokenize the input to extract command and arguments
-        char *token = strtok(input, " ");
-        if (token == NULL) {
-            continue; // Empty input, ask again
-        }
+        printf("Digite um comando: ");
+        scanf("%s", token);
 
         // Compare command and call the corresponding function
         if (strcmp(token, "login") == 0) {
-            UID = strtok(NULL, " ");
-            password = strtok(NULL, " ");
+            scanf("%s %s", UID, password);
             login(UID, password, ASIP, ASport);
 
         } else if (strcmp(token, "open") == 0) {
