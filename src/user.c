@@ -14,7 +14,7 @@ void sendUDPMessage(const char* message, char* reply, char* ASPort, char* ASIP);
 void sendTCPMessage(const char* message, char* reply, char* ASPort, char* ASIP);
 
 void login(char* UID, char* password, char* ASIP, char* ASPort);
-void openAuction(char* UID, char* password, char* name, char* asset_fname, int start_value, int timeactive,char* ASIP, char* ASPort);
+void openAuction(char* UID, char* password, char* name, char* asset_fname, char* start_value, char* timeactive,char* ASIP, char* ASPort);
 void closeAuction(char* UID, char* password, char* AID, char* ASIP, char* ASPort);
 void myAuctions(char* UID, char* ASIP, char* ASPort);
 void myBids(char* UID, char* ASIP, char* ASPort);
@@ -25,6 +25,7 @@ void showRecord(char* AID, char* ASIP, char* ASPort);
 void logout(char* UID, char* password, char* ASIP, char* ASPort);
 void unregister(char* UID, char* password, char* ASIP, char* ASPort);
 void exitApplication();
+char *readFile(const char *filename);
 
 int main(int argc, char *argv[]) {
     char ASIP[50] = "tejo.tecnico.ulisboa.pt"; //TODO DEBUG
@@ -59,10 +60,11 @@ int main(int argc, char *argv[]) {
             login(UID, password, ASIP, ASport);
 
         } else if (strcmp(token, "open") == 0) {
-            char *name = strtok(NULL, " ");
-            char *asset_fname = strtok(NULL, " ");
-            int start_value = atoi(strtok(NULL, " "));
-            int timeactive = atoi(strtok(NULL, " "));
+            char name[100];
+            char asset_fname[100];
+            char start_value[100];
+            char timeactive[100];
+            scanf("%s %s %s %s", name, asset_fname, start_value, timeactive);
             openAuction(UID, password, name, asset_fname, start_value, timeactive, ASIP, ASport);
 
         } else if (strcmp(token, "close") == 0) {
@@ -242,10 +244,9 @@ void login(char* UID, char* password, char* ASIP, char* ASPort) {
     }
 }
 
-void openAuction(char* UID, char* password, char* name, char* asset_fname, int start_value, int timeactive, char* ASIP, char* ASPort) {
+void openAuction(char* UID, char* password, char* name, char* asset_fname, char* start_value, char* timeactive, char* ASIP, char* ASPort) {
     // Prepare open auction message
     char openAuctionMessage[MAX_BUFFER_SIZE];
-    snprintf(openAuctionMessage, sizeof(openAuctionMessage), "OPA %s %s %s %d %d\n", UID, password, name, start_value, timeactive);
 
     // Open the file containing the asset
     FILE* assetFile = fopen(asset_fname, "rb");
@@ -256,11 +257,14 @@ void openAuction(char* UID, char* password, char* name, char* asset_fname, int s
 
     // Get the file size
     fseek(assetFile, 0, SEEK_END);
-    long fsize = ftell(assetFile);
+    long int fsize = ftell(assetFile);
     fseek(assetFile, 0, SEEK_SET);
 
-    // Append file information to the message
-    snprintf(openAuctionMessage + strlen(openAuctionMessage), sizeof(openAuctionMessage) - strlen(openAuctionMessage), "%s %ld ", asset_fname, fsize);
+    char *fileData = readFile(asset_fname);
+
+    snprintf(openAuctionMessage, sizeof(openAuctionMessage), "OPA %s %s %s %s %s %s %ld %s\n", UID, password, name, start_value, timeactive, asset_fname, fsize, fileData);
+
+    printf("%s", openAuctionMessage);
 
     // Read the file data
     fread(openAuctionMessage + strlen(openAuctionMessage), 1, fsize, assetFile);
@@ -281,6 +285,38 @@ void openAuction(char* UID, char* password, char* name, char* asset_fname, int s
     } else if (strncmp(reply, "ROA NLG", 7) == 0) {
         printf("Error: User not logged in.\n");
     }
+}
+
+// Function to read the content of a file into a variable
+char *readFile(const char *filename) {
+    FILE *file = fopen(filename, "rb");
+    if (!file) {
+        perror("Error opening file");
+        return NULL;
+    }
+
+    fseek(file, 0, SEEK_END);
+    long fileSize = ftell(file);
+    rewind(file);
+
+    char *buffer = (char *)malloc(fileSize + 1);
+    if (!buffer) {
+        perror("Memory allocation error");
+        fclose(file);
+        return NULL;
+    }
+
+    if (fread(buffer, 1, fileSize, file) != fileSize) {
+        perror("Error reading file");
+        free(buffer);
+        fclose(file);
+        return NULL;
+    }
+
+    buffer[fileSize] = '\0';
+
+    fclose(file);
+    return buffer;
 }
 
 void closeAuction(char* UID, char* password, char* AID, char* ASIP, char* ASPort) {
@@ -473,3 +509,4 @@ void unregister(char* UID, char* password, char* ASIP, char* ASPort) {
         printf("Unregister Result: Unrecognized user\n");
     }
 }
+
