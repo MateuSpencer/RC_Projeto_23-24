@@ -10,6 +10,9 @@
 
 #include "communication.h"
 
+void sendUDPMessage(const char* message, char* reply, char* ASPort, char* ASIP);
+void sendTCPMessage(const char* message, char* reply, char* ASPort, char* ASIP);
+
 void login(char* UID, char* password, char* ASIP, char* ASPort);
 void openAuction(char* UID, char* password, char* name, char* asset_fname, int start_value, int timeactive,char* ASIP, char* ASPort);
 void closeAuction(char* UID, char* password, int AID, char* ASIP, char* ASPort);
@@ -22,6 +25,89 @@ void showRecord(int AID, char* ASIP, char* ASPort);
 void logout(char* UID, char* password, char* ASIP, char* ASPort);
 void unregister(char* UID, char* password, char* ASIP, char* ASPort);
 void exitApplication();
+
+int main(int argc, char *argv[]) {
+    char ASIP[50] = "tejo.tecnico.ulisboa.pt"; //TODO DEBUG
+    char ASport[6] = "58011";
+
+    char input[50];
+
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-n") == 0 && i + 1 < argc) {
+            strncpy(ASIP, argv[i + 1], sizeof(ASIP) - 1);
+            ASIP[sizeof(ASIP) - 1] = '\0';
+            i++;
+        } else if (strcmp(argv[i], "-p") == 0 && i + 1 < argc) {
+            strncpy(ASport, argv[i + 1], sizeof(ASport) - 1);
+            ASport[sizeof(ASport) - 1] = '\0';
+            i++;
+        }
+    }
+
+    // Application loop
+    while (1) {
+        char token[50];
+        char UID[7];
+        char password[9];
+
+        printf("Digite um comando: ");
+        scanf("%s", token);
+
+        // Compare command and call the corresponding function
+        if (strcmp(token, "login") == 0) {
+            scanf("%s %s", UID, password); //TODO não sei se podemos associar já aqui, maybe deviamos esperar pela reposta
+            login(UID, password, ASIP, ASport);
+
+        } else if (strcmp(token, "open") == 0) {
+            char *name = strtok(NULL, " ");
+            char *asset_fname = strtok(NULL, " ");
+            int start_value = atoi(strtok(NULL, " "));
+            int timeactive = atoi(strtok(NULL, " "));
+            openAuction(UID, password, name, asset_fname, start_value, timeactive, ASIP, ASport);
+
+        } else if (strcmp(token, "close") == 0) {
+            int AID = atoi(strtok(NULL, " "));
+            closeAuction(UID, password, AID, ASIP, ASport);
+
+        } else if (strcmp(token, "myauctions") == 0 || strcmp(token, "ma") == 0) {
+            myAuctions(UID, ASIP, ASport);
+
+        } else if (strcmp(token, "mybids") == 0 || strcmp(token, "mb") == 0) {
+            myBids(UID, ASIP, ASport);
+
+        } else if (strcmp(token, "list") == 0 || strcmp(token, "l") == 0) {
+            listAuctions(ASIP, ASport);
+
+        } else if (strcmp(token, "show_asset") == 0 || strcmp(token, "sa") == 0) {
+            int AID = atoi(strtok(NULL, " "));
+            showAsset(AID, ASIP, ASport);
+
+        } else if (strcmp(token, "bid") == 0) {
+            int AID = atoi(strtok(NULL, " "));
+            int value = atoi(strtok(NULL, " "));
+            bid(UID, password, AID, value, ASIP , ASport);
+
+        } else if (strcmp(token, "show_record") == 0 || strcmp(token, "sr") == 0) {
+            int AID = atoi(strtok(NULL, " "));
+            showRecord(AID, ASIP, ASport);
+
+        } else if (strcmp(token, "logout") == 0) {
+            logout(UID, password, ASIP, ASport);
+
+        } else if (strcmp(token, "unregister") == 0) {
+            unregister(UID, password, ASIP, ASport);
+
+        } else if (strcmp(token, "exit") == 0) {
+            // TODO : verificar se nao ta loged in
+            break; // Exit the loop and end the program
+
+        } else {
+            printf("Invalid command. Try again.\n");
+        }
+    }
+
+    return 0;    
+}
 
 void sendUDPMessage(const char* message, char* reply, char* ASPort, char* ASIP) {
     int fd, errcode;
@@ -133,91 +219,6 @@ void sendTCPMessage(const char* message, char* reply, char* ASPort, char* ASIP) 
     close(fd);
 }
 
-int main(int argc, char *argv[]) {
-    char ASIP[50] = "tejo.tecnico.ulisboa.pt"; //TODO DEBUG
-    char ASport[6] = "58011";
-
-    char input[50];
-
-    for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "-n") == 0 && i + 1 < argc) {
-            strncpy(ASIP, argv[i + 1], sizeof(ASIP) - 1);
-            ASIP[sizeof(ASIP) - 1] = '\0';
-            i++;
-        } else if (strcmp(argv[i], "-p") == 0 && i + 1 < argc) {
-            strncpy(ASport, argv[i + 1], sizeof(ASport) - 1);
-            ASport[sizeof(ASport) - 1] = '\0';
-            i++;
-        }
-    }
-
-
-
-    // Application loop
-    while (1) {
-        char token[50];
-        char UID[7];
-        char password[9];
-
-        printf("Digite um comando: ");
-        scanf("%s", token);
-
-        // Compare command and call the corresponding function
-        if (strcmp(token, "login") == 0) {
-            scanf("%s %s", UID, password); //TODO não sei se podemos associar já aqui, maybe deviamos esperar pela reposta
-            login(UID, password, ASIP, ASport);
-
-        } else if (strcmp(token, "open") == 0) {
-            char *name = strtok(NULL, " ");
-            char *asset_fname = strtok(NULL, " ");
-            int start_value = atoi(strtok(NULL, " "));
-            int timeactive = atoi(strtok(NULL, " "));
-            openAuction(UID, password, name, asset_fname, start_value, timeactive, ASIP, ASport);
-
-        } else if (strcmp(token, "close") == 0) {
-            int AID = atoi(strtok(NULL, " "));
-            closeAuction(UID, password, AID, ASIP, ASport);
-
-        } else if (strcmp(token, "myauctions") == 0 || strcmp(token, "ma") == 0) {
-            myAuctions(UID, ASIP, ASport);
-
-        } else if (strcmp(token, "mybids") == 0 || strcmp(token, "mb") == 0) {
-            myBids(UID, ASIP, ASport);
-
-        } else if (strcmp(token, "list") == 0 || strcmp(token, "l") == 0) {
-            listAuctions(ASIP, ASport);
-
-        } else if (strcmp(token, "show_asset") == 0 || strcmp(token, "sa") == 0) {
-            int AID = atoi(strtok(NULL, " "));
-            showAsset(AID, ASIP, ASport);
-
-        } else if (strcmp(token, "bid") == 0) {
-            int AID = atoi(strtok(NULL, " "));
-            int value = atoi(strtok(NULL, " "));
-            bid(UID, password, AID, value, ASIP , ASport);
-
-        } else if (strcmp(token, "show_record") == 0 || strcmp(token, "sr") == 0) {
-            int AID = atoi(strtok(NULL, " "));
-            showRecord(AID, ASIP, ASport);
-
-        } else if (strcmp(token, "logout") == 0) {
-            logout(UID, password, ASIP, ASport);
-
-        } else if (strcmp(token, "unregister") == 0) {
-            unregister(UID, password, ASIP, ASport);
-
-        } else if (strcmp(token, "exit") == 0) {
-            // TODO : verificar se nao ta loged in
-            break; // Exit the loop and end the program
-
-        } else {
-            printf("Invalid command. Try again.\n");
-        }
-    }
-
-    return 0;    
-}
-
 // User Actions Functions
 void login(char* UID, char* password, char* ASIP, char* ASPort) {
     
@@ -238,35 +239,70 @@ void login(char* UID, char* password, char* ASIP, char* ASPort) {
     }
 }
 
-void openAuction(char* UID, char* password, char* name, char* asset_fname, int start_value, int timeactive,char* ASIP, char* ASPort){
+void openAuction(char* UID, char* password, char* name, char* asset_fname, int start_value, int timeactive, char* ASIP, char* ASPort) {
     // Prepare open auction message
     char openAuctionMessage[MAX_BUFFER_SIZE];
     snprintf(openAuctionMessage, sizeof(openAuctionMessage), "OPA %s %s %s %d %d\n", UID, password, name, start_value, timeactive);
+
+    // Open the file containing the asset
+    FILE* assetFile = fopen(asset_fname, "rb");
+    if (!assetFile) {
+        printf("Error opening asset file: %s\n", asset_fname);
+        return;
+    }
+
+    // Get the file size
+    fseek(assetFile, 0, SEEK_END);
+    long fsize = ftell(assetFile);
+    fseek(assetFile, 0, SEEK_SET);
+
+    // Append file information to the message
+    snprintf(openAuctionMessage + strlen(openAuctionMessage), sizeof(openAuctionMessage) - strlen(openAuctionMessage), "%s %ld ", asset_fname, fsize);
+
+    // Read the file data
+    fread(openAuctionMessage + strlen(openAuctionMessage), 1, fsize, assetFile);
+    fclose(assetFile);
 
     // Send open auction message
     char reply[MAX_BUFFER_SIZE];
     sendTCPMessage(openAuctionMessage, reply, ASIP, ASPort);
 
     // Process reply and display results
-    printf("Open Auction Result: %s\n", reply);
-
-    // TODO
-
+    if (strncmp(reply, "ROA OK", 6) == 0) {
+        // Auction opened successfully
+        int AID;
+        sscanf(reply + 7, "%d", &AID);
+        printf("Auction opened successfully! Auction ID: %d\n", AID);
+    } else if (strncmp(reply, "ROA NOK", 7) == 0) {
+        printf("Error opening auction: %s\n", reply + 8);
+    } else if (strncmp(reply, "ROA NLG", 7) == 0) {
+        printf("Error: User not logged in.\n");
+    }
 }
 
 void closeAuction(char* UID, char* password, int AID, char* ASIP, char* ASPort) {
     // Prepare close auction message
     char closeAuctionMessage[MAX_BUFFER_SIZE];
     snprintf(closeAuctionMessage, sizeof(closeAuctionMessage), "CLS %s %s %d\n", UID, password, AID);
-    
+
     // Send close auction message
     char reply[MAX_BUFFER_SIZE];
     sendTCPMessage(closeAuctionMessage, reply, ASIP, ASPort);
-    // Process reply and display results
-    printf("Close Auction Result: %s\n", reply);
 
-    //TODO
+    // Process reply and display results
+    if (strncmp(reply, "RCL OK", 6) == 0) {
+        printf("Auction closed successfully!\n");
+    } else if (strncmp(reply, "RCL NLG", 7) == 0) {
+        printf("Error: User not logged in.\n");
+    } else if (strncmp(reply, "RCL EAU", 7) == 0) {
+        printf("Error: Auction %d does not exist.\n", AID);
+    } else if (strncmp(reply, "RCL EOW", 7) == 0) {
+        printf("Error: Auction %d is not owned by user %s.\n", AID, UID);
+    } else if (strncmp(reply, "RCL END", 7) == 0) {
+        printf("Error: Auction %d owned by user %s has already finished.\n", AID, UID);
+    }
 }
+
 
 void myAuctions(char* UID, char* ASIP, char* ASPort) {
     char message[MAX_BUFFER_SIZE];
@@ -333,7 +369,6 @@ void showAsset(int AID, char* ASIP, char* ASPort) {
 
     char reply[MAX_BUFFER_SIZE];
     sendTCPMessage(showAssetMessage, reply, ASIP, ASPort);
-    //TODO
 
     // Process reply and display results
     if (strncmp(reply, "RSA OK", 6) == 0) {
@@ -354,18 +389,29 @@ void showAsset(int AID, char* ASIP, char* ASPort) {
     }
 }
 
-void bid(char* UID, char* password, int AID, int value, char* ASIP, char* ASPort){
+void bid(char* UID, char* password, int AID, int value, char* ASIP, char* ASPort) {
     // Prepare bid message
     char bidMessage[MAX_BUFFER_SIZE];
     snprintf(bidMessage, sizeof(bidMessage), "BID %s %s %d %d\n", UID, password, AID, value);
 
+    // Send bid message
     char reply[MAX_BUFFER_SIZE];
     sendTCPMessage(bidMessage, reply, ASIP, ASPort);
 
     // Process reply and display results
-    printf("Bid Result: %s\n", reply);
-    // TODO
+    if (strncmp(reply, "RBD ACC", 7) == 0) {
+        printf("Bid accepted!\n");
+    } else if (strncmp(reply, "RBD REF", 7) == 0) {
+        printf("Bid refused: A larger bid has already been placed.\n");
+    } else if (strncmp(reply, "RBD NOK", 7) == 0) {
+        printf("Bid refused: Auction is not active.\n");
+    } else if (strncmp(reply, "RBD NLG", 7) == 0) {
+        printf("Error: User not logged in.\n");
+    } else if (strncmp(reply, "RBD ILG", 7) == 0) {
+        printf("Error: User cannot bid in an auction hosted by themselves.\n");
+    }
 }
+
 
 void showRecord(int AID, char* ASIP, char* ASPort) {
     char message[MAX_BUFFER_SIZE];
