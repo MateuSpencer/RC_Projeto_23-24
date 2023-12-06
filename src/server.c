@@ -34,9 +34,9 @@ void handleLogoutRequest(char* request, char* response);
 void handleUnregisterRequest(char* request, char* response);
 
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[]) { //TODO take arguments
     pid_t udpProcess, tcpProcess;
-    char ASport[6]; //TODO
+    char ASport[6] = "58011";
 
     // Create UDP process
     udpProcess = fork();
@@ -290,7 +290,6 @@ void unregisterUser(const char* UID) {
     removeFile(loginFile);
 }
 
-// Include necessary headers
 
 void handleLoginRequest(char* request, char* response) {
     char* UID = strtok(NULL, " ");

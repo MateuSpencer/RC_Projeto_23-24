@@ -18,7 +18,5 @@
 // Communication Functions
 int createUDPSocket();
 int createTCPSocket();
-void sendUDPMessage(const char* message, char* reply, char* ASPort, char* ASIP);
-void sendTCPMessage(const char* message, char* reply, char* ASPort, char* ASIP);
 
 #endif // COMMUNICATION_H
