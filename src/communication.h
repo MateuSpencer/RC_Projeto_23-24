@@ -11,7 +11,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 
-#define MAX_BUFFER_SIZE 1024
+#define MAX_BUFFER_SIZE 4000
 #define MAX_FILENAME_SIZE 24
 #define MAX_PASSWORD_SIZE 9
 
