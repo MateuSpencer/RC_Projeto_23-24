@@ -22,7 +22,7 @@ void listAuctions(char* ASIP, char* ASPort);
 void showAsset(char* AID, char* ASIP, char* ASPort);
 void bid(char* UID, char* password, char* AID, char* value, char* ASIP, char* ASPort);
 void showRecord(char* AID, char* ASIP, char* ASPort);
-void logout(char* UID, char* password, char* ASIP, char* ASPort);
+int logout(char* UID, char* password, char* ASIP, char* ASPort, int isUserLoggedIn);
 void unregister(char* UID, char* password, char* ASIP, char* ASPort);
 void exitApplication();
 char *readFile(const char *filename);
@@ -44,6 +44,8 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    int isUserLoggedIn = 0;
+
     // Application loop
     while (1) {
         char token[50];
@@ -56,7 +58,7 @@ int main(int argc, char *argv[]) {
         // Compare command and call the corresponding function
         if (strcmp(token, "login") == 0) {
             scanf("%s %s", UID, password); //TODo, deviamos desasociar se nao for succesful
-            login(UID, password, ASIP, ASport);
+            isUserLoggedIn = login(UID, password, ASIP, ASport);
 
         } else if (strcmp(token, "open") == 0) {
             char name[100];
@@ -97,15 +99,18 @@ int main(int argc, char *argv[]) {
             showRecord(AID, ASIP, ASport);
 
         } else if (strcmp(token, "logout") == 0) {
-            logout(UID, password, ASIP, ASport);
+            isUserLoggedIn = logout(UID, password, ASIP, ASport, isUserLoggedIn);
             //TODO limpar UID e password?
 
         } else if (strcmp(token, "unregister") == 0) {
             unregister(UID, password, ASIP, ASport);
 
         } else if (strcmp(token, "exit") == 0) {
-            // TODO : verificar se nao ta loged in
-            break; // Exit the loop and end the program
+            if(isUserLoggedIn == 0){
+                break; // Exit the loop and end the program
+            } else {
+                printf("User is logged in. Please log out.\n");
+            }
 
         } else {
             printf("Invalid command. Try again.\n");
@@ -236,16 +241,16 @@ int login(char* UID, char* password, char* ASIP, char* ASPort) {
     // Process reply and display results
     if(strcmp(reply, "RLI OK\n") == 0){
         printf("Login Result: Successful!\n");
-        return 0;
+        return 1;
     } else if (strcmp(reply, "RLI NOK\n") == 0){
         printf("Login Result: Unsuccessful :(\n");
-        return -1;
+        return 0;
     } else if(strcmp(reply, "RLI REG\n") == 0){
         printf("Login Result: User Registered!\n");
-        return 0;
+        return 1;
     } else {
-    printf("Unexpected reply: %s\n", reply);
-        return -1;
+        printf("Unexpected reply: %s\n", reply);
+        return 0;
     }
 }
 
@@ -505,7 +510,7 @@ void showRecord(char* AID, char* ASIP, char* ASPort) {
     }
 }
 
-void logout(char* UID, char* password, char* ASIP, char* ASPort) {
+int logout(char* UID, char* password, char* ASIP, char* ASPort, int isUserLoggedIn) {
     char message[MAX_BUFFER_SIZE];
     snprintf(message, sizeof(message), "LOU %s %s\n", UID, password);
 
@@ -516,11 +521,16 @@ void logout(char* UID, char* password, char* ASIP, char* ASPort) {
     // Process reply and display results
     if(strcmp(reply, "RLO OK\n") == 0){
         printf("Logout Result: Successful!\n");
+        return 0;
     } else if (strcmp(reply, "RLO NOK\n") == 0){
         printf("Logout Result: Unsuccessful, user is not logged in\n");
+        return 0;
     } else if(strcmp(reply, "RLO UNR\n") == 0){
         printf("Logout Result: Unrecognized user\n");
+        return isUserLoggedIn;
     }
+
+    return -1;
 }
 
 void unregister(char* UID, char* password, char* ASIP, char* ASPort) {
