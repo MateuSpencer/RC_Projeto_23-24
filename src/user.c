@@ -10,16 +10,16 @@
 
 #include "communication.h"
 
-void sendUDPMessage(const char* message, char* reply, char* ASPort, char* ASIP);
-void sendTCPMessage(const char* message, char* reply, char* ASPort, char* ASIP);
+int UDPMessage(const char* message, char* reply, char* ASPort, char* ASIP);
+int TCPMessage(const char* message, char* reply, char* ASPort, char* ASIP);
 
-void login(char* UID, char* password, char* ASIP, char* ASPort);
+int login(char* UID, char* password, char* ASIP, char* ASPort);
 void openAuction(char* UID, char* password, char* name, char* asset_fname, char* start_value, char* timeactive,char* ASIP, char* ASPort);
 void closeAuction(char* UID, char* password, char* AID, char* ASIP, char* ASPort);
 void myAuctions(char* UID, char* ASIP, char* ASPort);
 void myBids(char* UID, char* ASIP, char* ASPort);
 void listAuctions(char* ASIP, char* ASPort);
-void showAsset(int AID, char* ASIP, char* ASPort);
+void showAsset(char* AID, char* ASIP, char* ASPort);
 void bid(char* UID, char* password, char* AID, char* value, char* ASIP, char* ASPort);
 void showRecord(char* AID, char* ASIP, char* ASPort);
 void logout(char* UID, char* password, char* ASIP, char* ASPort);
@@ -28,9 +28,8 @@ void exitApplication();
 char *readFile(const char *filename);
 
 int main(int argc, char *argv[]) {
-    char ASIP[50] = "tejo.tecnico.ulisboa.pt"; //TODO DEBUG
-    char ASport[6] = "58011";
-
+    char ASIP[50] = "tejo.tecnico.ulisboa.pt"; //TODO WHAT SHOULD BE THE PRESET
+    char ASport[6] = "58011"; //TODO WHAT SHOULD BE THE PRESET
     char input[50];
 
     for (int i = 1; i < argc; i++) {
@@ -56,7 +55,7 @@ int main(int argc, char *argv[]) {
 
         // Compare command and call the corresponding function
         if (strcmp(token, "login") == 0) {
-            scanf("%s %s", UID, password); //TODO não sei se podemos associar já aqui, maybe deviamos esperar pela reposta
+            scanf("%s %s", UID, password); //TODo, deviamos desasociar se nao for succesful
             login(UID, password, ASIP, ASport);
 
         } else if (strcmp(token, "open") == 0) {
@@ -82,7 +81,8 @@ int main(int argc, char *argv[]) {
             listAuctions(ASIP, ASport);
 
         } else if (strcmp(token, "show_asset") == 0 || strcmp(token, "sa") == 0) {
-            int AID = atoi(strtok(NULL, " "));
+            char AID[4];
+            scanf("%s", AID);
             showAsset(AID, ASIP, ASport);
 
         } else if (strcmp(token, "bid") == 0) {
@@ -98,6 +98,7 @@ int main(int argc, char *argv[]) {
 
         } else if (strcmp(token, "logout") == 0) {
             logout(UID, password, ASIP, ASport);
+            //TODO limpar UID e password?
 
         } else if (strcmp(token, "unregister") == 0) {
             unregister(UID, password, ASIP, ASport);
@@ -114,49 +115,41 @@ int main(int argc, char *argv[]) {
     return 0;    
 }
 
-void sendUDPMessage(const char* message, char* reply, char* ASPort, char* ASIP) {
+int UDPMessage(const char* message, char* reply, char* ASPort, char* ASIP) {
     int fd, errcode;
     ssize_t n;
-    socklen_t addrlen; // Tamanho do endereço
-    /*
-    hints - Estrutura que contém informações sobre o tipo de conexão que será estabelecida.
-    Podem-se considerar, literalmente, dicas para o sistema operacional sobre como
-    deve ser feita a conexão, de forma a facilitar a aquisição ou preencher dados.
-    res - Localização onde a função getaddrinfo() armazenará informações sobre o endereço.
-    */
+    socklen_t addrlen;
     struct addrinfo hints, *res;
     struct sockaddr_in addr;
-    /* Cria um socket UDP (SOCK_DGRAM) para IPv4 (AF_INET).
-    É devolvido um descritor de ficheiro (fd) para onde se deve comunicar. */
+
     fd = createUDPSocket();
 
-    /* Preenche a estrutura com 0s e depois atribui a informação já conhecida da ligação */
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_INET;      // IPv4
     hints.ai_socktype = SOCK_DGRAM; // UDP socket
 
-    /* Busca informação do host ASPort, na porta especificada,
-    guardando a informação nas `hints` e na `res`. Caso o host seja um nome
-    e não um endereço ASIP (como é o caso), efetua um DNS Lookup. */
-    errcode = getaddrinfo(ASPort, ASIP, &hints, &res); //TODO ASPort e ASIP nao estao trocados?
+    errcode = getaddrinfo(ASPort, ASIP, &hints, &res);
     if (errcode != 0) {
-        exit(1);
+        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(errcode));
+        close(fd);
+        return -1;
     }
 
-    /* Envia para o `fd` (socket) a mensagem "Hello!\n" com o tamanho 7.
-    Não são passadas flags (0), e é passado o endereço de destino.
-    É apenas aqui criada a ligação ao servidor. */
     n = sendto(fd, message, strlen(message), 0, res->ai_addr, res->ai_addrlen);
     if (n == -1) {
-        exit(1);
+        perror("sendto");
+        freeaddrinfo(res);
+        close(fd);
+        return -1;
     }
 
-    /* Recebe 128 Bytes do servidor e guarda-os no buffer.
-    As variáveis `addr` e `addrlen` não são usadas pois não foram inicializadas. */
     addrlen = sizeof(addr);
     n = recvfrom(fd, reply, MAX_BUFFER_SIZE, 0, (struct sockaddr *)&addr, &addrlen);
     if (n == -1) {
-        exit(1);
+        perror("recvfrom");
+        freeaddrinfo(res);
+        close(fd);
+        return -1;
     }
 
     // Find the position of the newline character in the received data
@@ -166,23 +159,19 @@ void sendUDPMessage(const char* message, char* reply, char* ASPort, char* ASIP) 
         *newline_pos = '\0';
     }
 
-    /* Desaloca a memória da estrutura `res` e fecha o socket */
     freeaddrinfo(res);
     close(fd);
+    return n; // Return the number of bytes read
 }
 
-void sendTCPMessage(const char* message, char* reply, char* ASPort, char* ASIP) {
+int TCPMessage(const char* message, char* reply, char* ASPort, char* ASIP) {
     int fd, errcode;
     ssize_t n;
     socklen_t addrlen;
     struct addrinfo hints, *res;
     struct sockaddr_in addr;
-    /* Cria um socket TCP (SOCK_STREAM) para IPv4 (AF_INET).
-    É devolvido um descritor de ficheiro (fd) para onde se deve comunicar. */
+
     fd = createTCPSocket();
-    if (fd == -1) {
-        exit(1);
-    }
 
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_INET;
@@ -190,26 +179,33 @@ void sendTCPMessage(const char* message, char* reply, char* ASPort, char* ASIP) 
 
     errcode = getaddrinfo(ASPort, ASIP, &hints, &res);
     if (errcode != 0) {
-        exit(1);
+        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(errcode));
+        close(fd);
+        return -1;
     }
 
-    /* Em TCP é necessário estabelecer uma ligação com o servidor primeiro (Handshake).
-    Então primeiro cria a conexão para o endereço obtido através de `getaddrinfo()`. */
     n = connect(fd, res->ai_addr, res->ai_addrlen);
     if (n == -1) {
-        exit(1);
+        perror("connect");
+        freeaddrinfo(res);
+        close(fd);
+        return -1;
     }
 
-    /* Escreve a mensagem "Hello!\n" para o servidor, especificando o seu tamanho */
-    n=write(fd, message, strlen(message));
+    n = write(fd, message, strlen(message));
     if (n == -1) {
-        exit(1);
+        perror("write");
+        freeaddrinfo(res);
+        close(fd);
+        return -1;
     }
 
-    /* Lê 128 Bytes do servidor e guarda-os no buffer. */
-    n=read(fd, reply, 128);
+n = read(fd, reply, MAX_BUFFER_SIZE);
     if (n == -1) {
-        exit(1);
+        perror("read");
+        freeaddrinfo(res);
+        close(fd);
+        return -1;
     }
 
     // Find the position of the newline character in the received data
@@ -219,33 +215,41 @@ void sendTCPMessage(const char* message, char* reply, char* ASPort, char* ASIP) 
         *newline_pos = '\0';
     }
 
-    /* Desaloca a memória da estrutura `res` e fecha o socket */
     freeaddrinfo(res);
     close(fd);
+    return n; // Return the number of bytes read
 }
 
 // User Actions Functions
-void login(char* UID, char* password, char* ASIP, char* ASPort) {
-    
+int login(char* UID, char* password, char* ASIP, char* ASPort) {
     char loginMessage[MAX_BUFFER_SIZE];
     snprintf(loginMessage, sizeof(loginMessage), "LIN %s %s\n", UID, password);
 
     //envia mensagem
     char reply[MAX_BUFFER_SIZE];
-    sendUDPMessage(loginMessage, reply, ASIP, ASPort);
+    int n = UDPMessage(loginMessage, reply, ASIP, ASPort);
+    if (n == -1){
+        printf("Error sending message\n");
+        return -1;
+    }
 
     // Process reply and display results
     if(strcmp(reply, "RLI OK\n") == 0){
         printf("Login Result: Successful!\n");
+        return 0;
     } else if (strcmp(reply, "RLI NOK\n") == 0){
         printf("Login Result: Unsuccessful :(\n");
+        return -1;
     } else if(strcmp(reply, "RLI REG\n") == 0){
         printf("Login Result: User Registered!\n");
+        return 0;
+    } else {
+    printf("Unexpected reply: %s\n", reply);
+        return -1;
     }
 }
 
 void openAuction(char* UID, char* password, char* name, char* asset_fname, char* start_value, char* timeactive, char* ASIP, char* ASPort) {
-    // Prepare open auction message
     char openAuctionMessage[MAX_BUFFER_SIZE];
 
     // Open the file containing the asset
@@ -259,20 +263,19 @@ void openAuction(char* UID, char* password, char* name, char* asset_fname, char*
     fseek(assetFile, 0, SEEK_END);
     long int fsize = ftell(assetFile);
     fseek(assetFile, 0, SEEK_SET);
-
+    fclose(assetFile);
+    
     char *fileData = readFile(asset_fname);
+    if (fileData == NULL) {
+        printf("Error reading asset file: %s\n", asset_fname);
+        return;
+    }
 
     snprintf(openAuctionMessage, sizeof(openAuctionMessage), "OPA %s %s %s %s %s %s %ld %s\n", UID, password, name, start_value, timeactive, asset_fname, fsize, fileData);
 
-    printf("%s", openAuctionMessage);
-
-    // Read the file data
-    fread(openAuctionMessage + strlen(openAuctionMessage), 1, fsize, assetFile);
-    fclose(assetFile);
-
     // Send open auction message
     char reply[MAX_BUFFER_SIZE];
-    sendTCPMessage(openAuctionMessage, reply, ASIP, ASPort);
+    TCPMessage(openAuctionMessage, reply, ASIP, ASPort);
 
     // Process reply and display results
     if (strncmp(reply, "ROA OK", 6) == 0) {
@@ -284,6 +287,8 @@ void openAuction(char* UID, char* password, char* name, char* asset_fname, char*
         printf("Error opening auction: %s\n", reply + 8);
     } else if (strncmp(reply, "ROA NLG", 7) == 0) {
         printf("Error: User not logged in.\n");
+    }else {
+        printf("Unexpected reply: %s\n", reply);
     }
 }
 
@@ -326,7 +331,7 @@ void closeAuction(char* UID, char* password, char* AID, char* ASIP, char* ASPort
 
     // Send close auction message
     char reply[MAX_BUFFER_SIZE];
-    sendTCPMessage(closeAuctionMessage, reply, ASIP, ASPort);
+    TCPMessage(closeAuctionMessage, reply, ASIP, ASPort);
 
     // Process reply and display results
     if (strncmp(reply, "RCL OK", 6) == 0) {
@@ -347,11 +352,8 @@ void myAuctions(char* UID, char* ASIP, char* ASPort) {
     char message[MAX_BUFFER_SIZE];
     snprintf(message, sizeof(message), "LMA %s\n", UID);
 
-    printf("DEBUG message: %s\n", message);
-
-    //envia mensagem
     char reply[MAX_BUFFER_SIZE];
-    sendUDPMessage(message, reply, ASIP, ASPort);
+    UDPMessage(message, reply, ASIP, ASPort);
 
     // Process reply and display results
     if (strcmp(reply, "RMA NOK\n") == 0){
@@ -359,7 +361,7 @@ void myAuctions(char* UID, char* ASIP, char* ASPort) {
     } else if(strcmp(reply, "RMA NLG\n") == 0){
         printf("%s is not logged in.\n", UID);
     } else {
-        printf("%s's Auctions: %s\n", UID, reply); //TODO: maybe será preciso imprimir melhor?
+        printf("%s's Auctions: %s\n", UID, reply); //TODO não imprimir RMA OK
     }
 }
 
@@ -367,11 +369,8 @@ void myBids(char* UID, char* ASIP, char* ASPort) {
     char message[MAX_BUFFER_SIZE];
     snprintf(message, sizeof(message), "LMB %s\n", UID);
 
-    printf("DEBUG message: %s\n", message);
-
-    //envia mensagem
     char reply[MAX_BUFFER_SIZE];
-    sendUDPMessage(message, reply, ASIP, ASPort);
+    UDPMessage(message, reply, ASIP, ASPort);
 
     // Process reply and display results
     if (strcmp(reply, "RMB NOK\n") == 0){
@@ -383,15 +382,14 @@ void myBids(char* UID, char* ASIP, char* ASPort) {
     }
 }
 
+//TODO FIX -  fica preso no rcvform no UDPMessage - maybe resposta demasiado grande?
 void listAuctions(char* ASIP, char* ASPort) {
     char message[MAX_BUFFER_SIZE];
     snprintf(message, sizeof(message), "LST\n");
 
-    printf("%s", message);
-
     //envia mensagem
     char reply[MAX_BUFFER_SIZE];
-    sendUDPMessage(message, reply, ASIP, ASPort);
+    UDPMessage(message, reply, ASIP, ASPort);
 
     // Process reply and display results
     if(strcmp(reply, "RLS NOK\n") == 0){
@@ -401,13 +399,14 @@ void listAuctions(char* ASIP, char* ASPort) {
     }
 }
 
-void showAsset(int AID, char* ASIP, char* ASPort) {
+//TODO FIX - problema a recebner no TCPMessage
+void showAsset(char* AID, char* ASIP, char* ASPort) {
     // Prepare show asset message
     char showAssetMessage[MAX_BUFFER_SIZE];
-    snprintf(showAssetMessage, sizeof(showAssetMessage), "SAS %d", AID);
+    snprintf(showAssetMessage, sizeof(showAssetMessage), "SAS %s", AID);
 
     char reply[MAX_BUFFER_SIZE];
-    sendTCPMessage(showAssetMessage, reply, ASIP, ASPort);
+    TCPMessage(showAssetMessage, reply, ASIP, ASPort);
 
     // Process reply and display results
     if (strncmp(reply, "RSA OK", 6) == 0) {
@@ -429,13 +428,11 @@ void showAsset(int AID, char* ASIP, char* ASPort) {
 }
 
 void bid(char* UID, char* password, char* AID, char* value, char* ASIP, char* ASPort) {
-    // Prepare bid message
     char bidMessage[MAX_BUFFER_SIZE];
     snprintf(bidMessage, sizeof(bidMessage), "BID %s %s %s %s\n", UID, password, AID, value);
 
-    // Send bid message
     char reply[MAX_BUFFER_SIZE];
-    sendTCPMessage(bidMessage, reply, ASIP, ASPort);
+    TCPMessage(bidMessage, reply, ASIP, ASPort);
 
     // Process reply and display results
     if (strncmp(reply, "RBD ACC", 7) == 0) {
@@ -448,6 +445,8 @@ void bid(char* UID, char* password, char* AID, char* value, char* ASIP, char* AS
         printf("Error: User not logged in.\n");
     } else if (strncmp(reply, "RBD ILG", 7) == 0) {
         printf("Error: User cannot bid in an auction hosted by themselves.\n");
+    }else {
+        printf("Unexpected reply: %s\n", reply);
     }
 }
 
@@ -460,13 +459,13 @@ void showRecord(char* AID, char* ASIP, char* ASPort) {
 
     //envia mensagem
     char reply[MAX_BUFFER_SIZE];
-    sendUDPMessage(message, reply, ASIP, ASPort);
+    UDPMessage(message, reply, ASIP, ASPort);
 
     // Process reply and display results
     if(strcmp(reply, "RRC NOK\n") == 0){
         printf("The auction %s does not exist\n", AID);
     } else {
-        printf("Show record %s result: %s", AID, reply);
+        printf("Show record %s result: %s", AID, reply); //TODO: more human friendly
     }
 }
 
@@ -474,11 +473,9 @@ void logout(char* UID, char* password, char* ASIP, char* ASPort) {
     char message[MAX_BUFFER_SIZE];
     snprintf(message, sizeof(message), "LOU %s %s\n", UID, password);
 
-    printf("%s", message);
-
     //envia mensagem
     char reply[MAX_BUFFER_SIZE];
-    sendUDPMessage(message, reply, ASIP, ASPort);
+    UDPMessage(message, reply, ASIP, ASPort);
 
     // Process reply and display results
     if(strcmp(reply, "RLO OK\n") == 0){
@@ -498,7 +495,7 @@ void unregister(char* UID, char* password, char* ASIP, char* ASPort) {
 
     //envia mensagem
     char reply[MAX_BUFFER_SIZE];
-    sendUDPMessage(message, reply, ASIP, ASPort);
+    UDPMessage(message, reply, ASIP, ASPort);
 
     // Process reply and display results
     if(strcmp(reply, "RUR OK\n") == 0){
