@@ -361,7 +361,43 @@ void myAuctions(char* UID, char* ASIP, char* ASPort) {
     } else if(strcmp(reply, "RMA NLG\n") == 0){
         printf("%s is not logged in.\n", UID);
     } else {
-        printf("%s's Auctions: %s\n", UID, reply); //TODO não imprimir RMA OK
+        char pairs[1998][4]; 
+
+        // Remove newline character from input
+        reply[strcspn(reply, "\n")] = '\0';
+
+        // Parse pairs of words
+        int count = 0;
+        char *token = strtok(reply + 6, " ");
+        while (token != NULL) {
+            // Save the pair
+            strncpy(pairs[count], token, 3);
+            pairs[count][3] = '\0'; // Null-terminate the word
+
+            // Move to the next token
+            token = strtok(NULL, " ");
+
+            // Increment the count
+            count++;
+
+            // Check if there is another token (the size should be 1)
+            if (token != NULL) {
+                // Save the second word in the pair
+                strncpy(pairs[count], token, 1);
+                pairs[count][1] = '\0';
+
+                // Move to the next token
+                token = strtok(NULL, " ");
+
+                // Increment the count
+                count++;
+            }
+        }
+
+        printf("%s's Auctions:\n", UID);
+        for (int i = 0; i < count; i += 2) {
+            printf("Auction %s is in state %s\n", pairs[i], pairs[i + 1]);
+        }
     }
 }
 
