@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <stdbool.h>
+#include <dirent.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -25,6 +27,10 @@ void writeFile(const char *filePath, const char *content);
 void removeFile(const char *filePath);
 
 int validateUser(const char* UID, const char* password);
+int newAIDdirectory();
+bool auctionExists(int AID);
+bool auctionOwnedByUser(int AID, const char* UID);
+bool auctionAlreadyEnded(int AID);
 
 void handleLoginRequest(char* request, char* response, int verbose);
 void handleOpenAuctionRequest(char* request, char* response, int verbose);
@@ -317,6 +323,101 @@ int validateUser(const char* UID, const char* password) {
     return USER_NOT_EXIST;  // Default to USER_NOT_EXIST in case of unexpected errors
 }
 
+// Helper function to find the highest AID in the AUCTIONS directory and create a new directory for the next AID
+int newAIDdirectory() {
+    DIR *dir = opendir("AS/AUCTIONS");
+    struct dirent *entry;
+    int highestAID = 0;
+
+    if (dir != NULL) {
+        while ((entry = readdir(dir)) != NULL) {
+            if (entry->d_type == DT_DIR) {
+                int currentAID = atoi(entry->d_name);
+                if (currentAID > highestAID) {
+                    highestAID = currentAID;
+                }
+            }
+        }
+
+        // Create the directory for the next AID
+        int nextAID = highestAID + 1;
+        char auctionDir[50];
+        snprintf(auctionDir, sizeof(auctionDir), "AS/AUCTIONS/%d", nextAID);
+        createDirectory(auctionDir);
+
+        closedir(dir);
+        return nextAID;
+    } else {
+        perror("Error opening AUCTIONS directory");
+        return -1;
+    }
+}
+
+// Helper function to check if an auction with the given AID exists
+bool auctionExists(int AID) {
+    char auctionDir[50];
+    snprintf(auctionDir, sizeof(auctionDir), "AS/AUCTIONS/%d", AID);
+
+    struct stat st;
+    return stat(auctionDir, &st) == 0 && S_ISDIR(st.st_mode);
+}
+
+// Helper function to check if an auction with the given AID is owned by the specified UID
+bool auctionOwnedByUser(int AID, const char* UID) {
+    char hostedDir[50];
+    snprintf(hostedDir, sizeof(hostedDir), "AS/USERS/%s/HOSTED", UID);
+
+    char auctionFile[100];
+    snprintf(auctionFile, sizeof(auctionFile), "%s/%d.txt", hostedDir, AID);
+
+    return access(auctionFile, F_OK) != -1;
+}
+
+// Helper function to check if an auction with the given AID has already ended
+bool auctionAlreadyEnded(int AID) {
+    char endFile[100];
+    snprintf(endFile, sizeof(endFile), "AS/AUCTIONS/%d/END.txt", AID);
+
+    return access(endFile, F_OK) != -1;
+}
+
+
+// Helper function to create a new bid if possible
+int newBid(int AID, int newBidValue) {
+    char bidsDir[50];
+    snprintf(bidsDir, sizeof(bidsDir), "AS/AUCTIONS/%d/BIDS", AID);
+
+    DIR* dir = opendir(bidsDir);
+    struct dirent* entry;
+    int highestBid = 0;
+
+    if (dir != NULL) {
+        while ((entry = readdir(dir)) != NULL) {
+            if (entry->d_type == DT_REG) {  // Regular file
+                int currentBid = atoi(entry->d_name);
+                if (currentBid > highestBid) {
+                    highestBid = currentBid;
+                }
+            }
+        }
+
+        closedir(dir);
+
+        if (newBidValue > highestBid) {
+            // Create a new entry for the bid
+            char bidFile[50];
+            snprintf(bidFile, sizeof(bidFile), "AS/AUCTIONS/%d/BIDS/%06d.txt", AID, newBidValue);
+            createFile(bidFile, "");
+            return 0;  // Bid accepted
+        } else {
+            // Bid refused because a larger bid has already been placed
+            return -2;
+        }
+    } else {
+        perror("Error opening BIDS directory");
+        return -1;
+    }
+}
 /* --------------------- HANDLER FUNCTIONS  -----------------------------------*/
 
 void handleLoginRequest(char* request, char* response, int verbose) {
@@ -369,38 +470,71 @@ void handleLoginRequest(char* request, char* response, int verbose) {
     }
 }
 
-void handleOpenAuctionRequest(char* request, char* response, int verbose) {
-    char* UID = strtok(NULL, " ");
-    char* password = strtok(NULL, " ");
-    char* name = strtok(NULL, " ");
-    char* start_value_str = strtok(NULL, " ");
-    char* timeactive_str = strtok(NULL, " ");
-    char* Fname = strtok(NULL, " ");
-    char* Fsize_str = strtok(NULL, " ");
-    char* Fdata = strtok(NULL, " ");
+//TODO: como e quando encerrar o leilao com limite de tempo?
+void handleOpenAuctionRequest(char *request, char *response, int verbose) {
+    char *UID = strtok(NULL, " ");
+    char *password = strtok(NULL, " ");
+    char *name = strtok(NULL, " ");
+    char *start_value_str = strtok(NULL, " ");
+    char *timeactive_str = strtok(NULL, " ");
+    char *Fname = strtok(NULL, " ");
+    char *Fsize_str = strtok(NULL, " ");
+    char *Fdata = strtok(NULL, "\n");
 
     int start_value = atoi(start_value_str);
     int timeactive = atoi(timeactive_str);
     int Fsize = atoi(Fsize_str);
 
-    // TODO: Check if UID and password are valid
+    int validation = validateUser(UID, password);
 
+    if (validation == VALID_USER) {
+        // Valid user
+        int AID = newAIDdirectory();
+        if (AID =! -1) {
+            // Create START file
+            char startFilePath[100];
+            snprintf(startFilePath, sizeof(startFilePath), "AS/AUCTIONS/%d/START.txt", AID);
+            FILE *startFile = fopen(startFilePath, "w");
+            if (startFile != NULL) {
+                fprintf(startFile, "%s %s %s %d %d", UID, name, Fname, start_value, timeactive);
+                fclose(startFile);
+            } else {
+                perror("Error creating START file");
+                exit(EXIT_FAILURE);//TODO: Better handling
+            }
 
-    if (/* UID and password are valid */) {
-        char auctionDir[50];
-        snprintf(auctionDir, sizeof(auctionDir), "AS/AUCTIONS/%d", AID);
-        createDirectory(auctionDir);
+            // Create asset file
+            char assetFilePath[100];
+            snprintf(assetFilePath, sizeof(assetFilePath), "AS/AUCTIONS/%d/%s", AID, Fname);
+            writeFile(assetFilePath, Fdata);
 
-        createFile(auctionDir, "START.txt");
+            // Create BIDS directory
+            char bidsDir[50];
+            snprintf(bidsDir, sizeof(bidsDir), "AS/AUCTIONS/%d/BIDS", AID);
+            createDirectory(bidsDir);
 
-        createFile(auctionDir, asset_fname);
+            // Create an empty file in the UID's HOSTED directory with the AID as the filename
+            char hostedDir[50];
+            snprintf(hostedDir, sizeof(hostedDir), "AS/USERS/%s/HOSTED", UID);
+            createDirectory(hostedDir);
 
-        char bidsDir[50];
-        snprintf(bidsDir, sizeof(bidsDir), "%s/BIDS", auctionDir);
-        createDirectory(bidsDir);
-        strcpy(response, "ROA OK [AID]");
+            char hostedFilename[100];
+            snprintf(hostedFilename, sizeof(hostedFilename), "%d.txt", AID);
+            createFile(hostedDir, hostedFilename);
+
+            snprintf(response, MAX_BUFFER_SIZE, "ROA OK %d\n", AID);
+        } else {
+            // Error creating new AID directory
+            snprintf(response, MAX_BUFFER_SIZE, "ROA NOK\n");
+            return;
+        }
+    } else if (validation == USER_NOT_EXIST) {
+        snprintf(response, MAX_BUFFER_SIZE, "ROA NLG\n");
+    } else if (validation == INVALID_PASSWORD) {
+        snprintf(response, MAX_BUFFER_SIZE, "ROA NLG\n");
     } else {
-        strcpy(response, "ROA NOK");
+        // Unexpected error
+        snprintf(response, MAX_BUFFER_SIZE, "ROA NOK\n");
     }
 }
 
@@ -411,14 +545,38 @@ void handleCloseAuctionRequest(char* request, char* response, int verbose) {
 
     int AID = atoi(AID_str);
 
-    // TODO: Check if UID and password are valid
-    if (/* UID and password are valid */) {
-        char auctionDir[50];
-        snprintf(auctionDir, sizeof(auctionDir), "AS/AUCTIONS/%d", AID);
+    // Check if UID and password are valid
+    int validation = validateUser(UID, password);
 
-        createFile(auctionDir, "END.txt");
-        strcpy(response, "RCL OK");
+    if (validation == VALID_USER) {
+        // Check if the auction exists
+        if (auctionExists(AID)) {
+            // Check if the auction is owned by the user
+            if (auctionOwnedByUser(AID, UID)) {
+                // Check if the auction has already ended
+                if (!auctionAlreadyEnded(AID)) {
+                    // Close the auction by creating the END file
+                    char endFilePath[100];
+                    snprintf(endFilePath, sizeof(endFilePath), "AS/AUCTIONS/%d/END.txt", AID);
+                    createFile(endFilePath, "");
+
+                    strcpy(response, "RCL OK");
+                    return;
+                } else {
+                    strcpy(response, "RCL END"); // Auction has already ended
+                }
+            } else {
+                strcpy(response, "RCL EOW"); // Auction is not owned by the user
+            }
+        } else {
+            strcpy(response, "RCL EAU"); // Auction does not exist
+        }
+    } else if (validation == USER_NOT_EXIST) {
+        strcpy(response, "RCL NLG");// Not  specified? maybe NOK
+    } else if (validation == INVALID_PASSWORD) {
+        strcpy(response, "RCL NLG");
     } else {
+        // Unexpected error
         strcpy(response, "RCL NOK");
     }
 }
@@ -469,13 +627,42 @@ void handleBidRequest(char* request, char* response, int verbose) {
     int AID = atoi(AID_str);
     int value = atoi(value_str);
 
-    // TODO: Check if UID and password are valid
-    if (/* UID and password are valid */) {
-        char bidFile[50];
-        snprintf(bidFile, sizeof(bidFile), "AS/AUCTIONS/%d/BIDS/%06d", AID, value);
-        createFile(bidFile, "");
-        strcpy(response, "RBD OK");
+    // Check if UID and password are valid
+    int validation = validateUser(UID, password);
+
+    if (validation == VALID_USER) {
+        // Check if the auction exists and if the auction is ongoing 
+        if (auctionExists(AID) && !auctionAlreadyEnded(AID)) {
+            // Check if the user is trying to bid in an auction hosted by himself
+            if (!auctionOwnedByUser(AID, UID)) {
+                // Create a new bid
+                int result = newBid(AID, value);
+
+                if (result == 0) {
+                    // Bid accepted
+                    strcpy(response, "RBD ACC");
+                    return;
+                } else if (result == -2) {
+                    // Bid refused because a larger bid has already been placed
+                    strcpy(response, "RBD REF");
+                    return;
+                } else {
+                    // Error handling the new bid
+                    strcpy(response, "RBD NOK");
+                    return;
+                }
+            } else {
+                // Illegal bid in an auction hosted by the user
+                strcpy(response, "RBD ILG");
+            }
+        } else {
+            // Auction does not exist
+            strcpy(response, "RBD NOK");
+        }
+    } else if (validation == USER_NOT_EXIST || validation == INVALID_PASSWORD) {//TODO:Notspecified invalid password
+        strcpy(response, "RBD NLG");
     } else {
+        // Unexpected error
         strcpy(response, "RBD NOK");
     }
 }
