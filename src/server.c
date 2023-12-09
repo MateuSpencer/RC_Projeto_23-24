@@ -3,6 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdbool.h>
+#include <time.h>
 #include <dirent.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -25,19 +26,25 @@ void createDirectory(const char *path);
 void createFile(const char *directory, const char *filename);
 void writeFile(const char *filePath, const char *content);
 void removeFile(const char *filePath);
+void getCurrentDateTime(char* dateTime);
 
 int validateUser(const char* UID, const char* password);
 int newAIDdirectory();
 bool auctionExists(int AID);
 bool auctionOwnedByUser(int AID, const char* UID);
 bool auctionAlreadyEnded(int AID);
+int newBid(int AID, int newBidValue);
+int validateUserLoggedIn(const char* UID);
+int isDirectoryEmpty(const char* path);
+int hasAuctionEnded(int AID);
+int fileExists(const char* filePath);
 
 void handleLoginRequest(char* request, char* response, int verbose);
 void handleOpenAuctionRequest(char* request, char* response, int verbose);
 void handleCloseAuctionRequest(char* request, char* response, int verbose);
 void handleMyAuctionsRequest(char* request, char* response, int verbose);
 void handleMyBidsRequest(char* request, char* response, int verbose);
-void handleListAuctionsRequest(char** response, int verbose);
+void handleListAuctionsRequest(char* response, int verbose);
 void handleShowAssetRequest(char* request, char* response, int verbose);
 void handleBidRequest(char* request, char* response, int verbose);
 void handleShowRecordRequest(char* request, char* response, int verbose);
@@ -285,6 +292,16 @@ void removeFile(const char *filePath) {
     }
 }
 
+// Function to get the current date and time in the required format
+void getCurrentDateTime(char* dateTime) {
+    time_t t;
+    struct tm* tmp;
+
+    t = time(NULL);
+    tmp = localtime(&t);
+
+    strftime(dateTime, 20, "%Y-%m-%d %H:%M:%S", tmp);
+}
 /* --------------------- HELPER FUNCTIONS  -----------------------------------*/
 // Helper function to validate user existence and password
 int validateUser(const char* UID, const char* password) {
@@ -418,6 +435,49 @@ int newBid(int AID, int newBidValue) {
         return -1;
     }
 }
+
+// Helper function to validate if the user is logged in
+int validateUserLoggedIn(const char* UID) {
+    char loginFile[50];
+    snprintf(loginFile, sizeof(loginFile), "AS/USERS/%s/login.txt", UID);
+
+    // Check if the login file exists
+    if (access(loginFile, F_OK) != -1) {
+        return 1;  // User is logged in
+    } else {
+        return 0;  // User is not logged in
+    }
+}
+
+// Helper function to check if a directory is empty
+int isDirectoryEmpty(const char* path) {
+    DIR* dir = opendir(path);
+    if (dir != NULL) {
+        struct dirent* entry = readdir(dir);
+        int isEmpty = (entry == NULL);
+        closedir(dir);
+        return isEmpty;
+    }
+    return -1;  // Error opening directory
+}
+
+// Helper function to check if an auction has ended (based on the presence of END.txt file)
+int hasAuctionEnded(int AID) {
+    char endFilePath[100];
+    snprintf(endFilePath, sizeof(endFilePath), "AS/AUCTIONS/%d/END.txt", AID);
+    return access(endFilePath, F_OK) != -1;
+}
+
+// Helper function to check if a file exists
+int fileExists(const char* filePath) {
+    FILE* file = fopen(filePath, "r");
+    if (file != NULL) {
+        fclose(file);
+        return 1;  // File exists
+    }
+    return 0;  // File does not exist
+}
+
 /* --------------------- HANDLER FUNCTIONS  -----------------------------------*/
 
 void handleLoginRequest(char* request, char* response, int verbose) {
@@ -560,62 +620,221 @@ void handleCloseAuctionRequest(char* request, char* response, int verbose) {
                     snprintf(endFilePath, sizeof(endFilePath), "AS/AUCTIONS/%d/END.txt", AID);
                     createFile(endFilePath, "");
 
-                    strcpy(response, "RCL OK");
+                    strcpy(response, "RCL OK\n");
                     return;
                 } else {
-                    strcpy(response, "RCL END"); // Auction has already ended
+                    strcpy(response, "RCL END\n"); // Auction has already ended
                 }
             } else {
-                strcpy(response, "RCL EOW"); // Auction is not owned by the user
+                strcpy(response, "RCL EOW\n"); // Auction is not owned by the user
             }
         } else {
-            strcpy(response, "RCL EAU"); // Auction does not exist
+            strcpy(response, "RCL EAU\n"); // Auction does not exist
         }
     } else if (validation == USER_NOT_EXIST) {
-        strcpy(response, "RCL NLG");// Not  specified? maybe NOK
+        strcpy(response, "RCL NLG\n");// Not  specified? maybe NOK
     } else if (validation == INVALID_PASSWORD) {
-        strcpy(response, "RCL NLG");
+        strcpy(response, "RCL NLG\n");
     } else {
         // Unexpected error
-        strcpy(response, "RCL NOK");
+        strcpy(response, "RCL NOK\n");
     }
 }
 
 void handleMyAuctionsRequest(char* request, char* response, int verbose) {
     char* UID = strtok(NULL, " ");
 
-    // TODO: Check if UID is valid
-    if (/* UID is valid */) {
-        // TODO: Implement logic to get a list of user's auctions
-        strcpy(response, "RMA OK [AID state]*");
+    // Prepare string to store AID and state information
+    char aidStateString[MAX_BUFFER_SIZE];
+    snprintf(aidStateString, sizeof(aidStateString), "");
+
+    // Check if the user directory exists
+    char userDir[50];
+    snprintf(userDir, sizeof(userDir), "AS/USERS/%s", UID);
+
+    struct dirent* entry;
+    DIR* hostedDirPtr = opendir(strcat(userDir, "/HOSTED"));
+
+    if (hostedDirPtr != NULL) {
+        // Loop through the HOSTED directory
+        while ((entry = readdir(hostedDirPtr)) != NULL) {
+            if (entry->d_type == DT_DIR && strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
+                int AID = atoi(entry->d_name);
+
+                // Check if the auction has ended
+                int state = hasAuctionEnded(AID) ? 0 : 1;
+
+                // Append AID and state to the string
+                snprintf(aidStateString + strlen(aidStateString), MAX_BUFFER_SIZE - strlen(aidStateString), " %d %d", AID, state);
+            }
+        }
+
+        closedir(hostedDirPtr);
+    }
+
+    // Check if the user has ongoing bids
+    DIR* biddedDirPtr = opendir(strcat(userDir, "/BIDDED"));
+
+    if (biddedDirPtr != NULL) {
+        // Loop through the BIDDED directory
+        while ((entry = readdir(biddedDirPtr)) != NULL) {
+            if (entry->d_type == DT_DIR && strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
+                int AID = atoi(entry->d_name);
+
+                // Check if the auction has ended
+                int state = hasAuctionEnded(AID) ? 0 : 1;
+
+                // Append AID and state to the string
+                snprintf(aidStateString + strlen(aidStateString), MAX_BUFFER_SIZE - strlen(aidStateString), " %d %d", AID, state);
+            }
+        }
+
+        closedir(biddedDirPtr);
+    }
+
+    // Check if there are ongoing auctions for the user
+    if (strlen(aidStateString) > 0) {
+        // At least one ongoing auction
+        snprintf(response, MAX_BUFFER_SIZE, "RMA OK %s\n", aidStateString);
     } else {
-        strcpy(response, "RMA NOK");
+        // No ongoing auctions for the user
+        snprintf(response, MAX_BUFFER_SIZE, "RMA NOK\n");
     }
 }
 
 void handleMyBidsRequest(char* request, char* response, int verbose) {
     char* UID = strtok(NULL, " ");
 
-    // TODO: Check if UID is valid
-    if (/* UID is valid */) {
-        // TODO: Implement logic to get a list of user's bids
-        strcpy(response, "RMB OK [AID state]*");
+    int loggedIn = validateUserLoggedIn(UID);
+
+    if (loggedIn) {
+        char biddedDir[50];
+        snprintf(biddedDir, sizeof(biddedDir), "AS/USERS/%s/BIDDED", UID);
+
+        if (isDirectoryEmpty(biddedDir) == 0) {
+            // User has ongoing bids
+
+            // Prepare response string
+            snprintf(response, MAX_BUFFER_SIZE, "RMB OK");
+
+            // Open the BIDDED directory
+            DIR* biddedDirPtr = opendir(biddedDir);
+
+            if (biddedDirPtr != NULL) {
+                struct dirent* entry;
+
+                // Loop through the BIDDED directory
+                while ((entry = readdir(biddedDirPtr)) != NULL) {
+                    if (entry->d_type == DT_REG) {  // Regular file (assuming each entry is a file)
+                        int AID = atoi(entry->d_name);
+
+                        // Check if the auction has ended
+                        int state = hasAuctionEnded(AID) ? 0 : 1;
+
+                        // Append AID and state to the response string
+                        snprintf(response + strlen(response), MAX_BUFFER_SIZE - strlen(response), " %d %d", AID, state);
+                    }
+                }
+                strcat(response, "\n");
+                closedir(biddedDirPtr);
+            }//TODO: Handle eror
+        } else {
+            // User has no ongoing bids
+            snprintf(response, MAX_BUFFER_SIZE, "RMB NOK\n");
+        }
     } else {
-        strcpy(response, "RMB NOK");
+        // User is not logged in
+        strcpy(response, "RMB NLG\n");
     }
 }
 
-void handleListAuctionsRequest(char** response, int verbose) {
-    // TODO: Implement logic to get a list of all auctions
-    strcpy(*response, "RLS OK [AID state]*");
+void handleListAuctionsRequest(char* response, int verbose) {
+    // Prepare string to store AID and state information
+    char aidStateString[MAX_BUFFER_SIZE];
+    snprintf(aidStateString, sizeof(aidStateString), "");
+
+    // Open the AUCTIONS directory
+    DIR* auctionsDirPtr = opendir("AS/AUCTIONS");
+
+    if (auctionsDirPtr != NULL) {
+        struct dirent* entry;
+
+        // Loop through the AUCTIONS directory
+        while ((entry = readdir(auctionsDirPtr)) != NULL) {
+            if (entry->d_type == DT_DIR && strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
+                int AID = atoi(entry->d_name);
+
+                // Check if the auction has ended
+                int state = hasAuctionEnded(AID) ? 0 : 1;
+
+                // Append AID and state to the string
+                snprintf(aidStateString + strlen(aidStateString), MAX_BUFFER_SIZE - strlen(aidStateString), " %d %d", AID, state);
+            }
+        }
+
+        closedir(auctionsDirPtr);
+    }
+
+    // Check if there are ongoing auctions
+    if (strlen(aidStateString) > 0) {
+        // At least one ongoing auction
+        snprintf(response, MAX_BUFFER_SIZE, "RLS OK %s\n", aidStateString);
+    } else {
+        // No auctions or all auctions have ended
+        snprintf(response, MAX_BUFFER_SIZE, "RLS NOK\n");
+    }
 }
 
 void handleShowAssetRequest(char* request, char* response, int verbose) {
     char* AID_str = strtok(NULL, " ");
     int AID = atoi(AID_str);
 
-    // TODO: Implement logic to send the asset file
-    strcpy(response, "RSA OK [Fname Fsize Fdata]");
+    char auctionDir[50];
+    snprintf(auctionDir, sizeof(auctionDir), "AS/AUCTIONS/%d", AID);
+
+    char startFilePath[100];
+    snprintf(startFilePath, sizeof(startFilePath), "%s/START.txt", auctionDir);
+
+    FILE* startFile = fopen(startFilePath, "r");
+    // Check if the START file exists
+    if (startFile != NULL) {
+        // Read information from the START file
+        char UID[MAX_BUFFER_SIZE], name[MAX_BUFFER_SIZE], Fname[MAX_BUFFER_SIZE];
+        int start_value, timeactive;
+        fscanf(startFile, "%s %s %s %d %d", UID, name, Fname, &start_value, &timeactive);
+        fclose(startFile);
+
+        // Check if the asset file exists
+        char assetFilePath[100];
+        snprintf(assetFilePath, sizeof(assetFilePath), "%s/%s", auctionDir, Fname);
+
+        FILE* assetFile = fopen(assetFilePath, "r");
+        if (assetFile != NULL) {
+            // Read file contents
+            fseek(assetFile, 0, SEEK_END);
+            long fileSize = ftell(assetFile);
+            fseek(assetFile, 0, SEEK_SET);
+
+            char* fileContents = (char*)malloc(fileSize + 1);
+            fread(fileContents, 1, fileSize, assetFile);
+            fclose(assetFile);
+
+            // Null-terminate the file contents
+            fileContents[fileSize] = '\0';
+
+            // Prepare response
+            snprintf(response, MAX_BUFFER_SIZE, "RSA OK %s %ld %s\n", Fname, fileSize, fileContents);
+
+            // Free allocated memory
+            free(fileContents);
+        } else {
+            // Asset file not found
+            snprintf(response, MAX_BUFFER_SIZE, "RSA NOK\n");
+        }
+    } else {
+        // START file not found
+        snprintf(response, MAX_BUFFER_SIZE, "RSA NOK\n");
+    }
 }
 
 void handleBidRequest(char* request, char* response, int verbose) {
@@ -640,39 +859,104 @@ void handleBidRequest(char* request, char* response, int verbose) {
 
                 if (result == 0) {
                     // Bid accepted
-                    strcpy(response, "RBD ACC");
+                    strcpy(response, "RBD ACC\n");
                     return;
                 } else if (result == -2) {
                     // Bid refused because a larger bid has already been placed
-                    strcpy(response, "RBD REF");
+                    strcpy(response, "RBD REF\n");
                     return;
                 } else {
                     // Error handling the new bid
-                    strcpy(response, "RBD NOK");
+                    strcpy(response, "RBD NOK\n");
                     return;
                 }
             } else {
                 // Illegal bid in an auction hosted by the user
-                strcpy(response, "RBD ILG");
+                strcpy(response, "RBD ILG\n");
             }
         } else {
             // Auction does not exist
-            strcpy(response, "RBD NOK");
+            strcpy(response, "RBD NOK\n");
         }
     } else if (validation == USER_NOT_EXIST || validation == INVALID_PASSWORD) {//TODO:Notspecified invalid password
-        strcpy(response, "RBD NLG");
+        strcpy(response, "RBD NLG\n");
     } else {
         // Unexpected error
-        strcpy(response, "RBD NOK");
+        strcpy(response, "RBD NOK\n");
     }
 }
 
-void handleShowRecordRequest(char* request, char* response, int verbose) {
+void handleShowRecordRequest(char* request, char* response, int verbose) { //TODO: not very well chcked came from chatGPT, não sei como vai funcionar mandar a a mensagems e o protocolo tem \n e é suposto acabar em \n
     char* AID_str = strtok(NULL, " ");
     int AID = atoi(AID_str);
 
-    // TODO: Implement logic to get the auction record
-    strcpy(response, "RRC OK [host_UID auction_name asset_fname start_value start_date-time timeactive] [B bidder_UID bid_value bid_date-time bid_sec_time]* [E end_date-time end_sec_time]");
+    char auctionDir[50];
+    snprintf(auctionDir, sizeof(auctionDir), "AS/AUCTIONS/%d", AID);
+    
+    char startFilePath[100];
+    snprintf(startFilePath, sizeof(startFilePath), "%s/START.txt", auctionDir);
+
+    // Check if the START file exists
+    if (fileExists(startFilePath)) {
+        // Read information from the START file
+        char host_UID[MAX_BUFFER_SIZE], auction_name[MAX_BUFFER_SIZE], asset_fname[MAX_BUFFER_SIZE];
+        int start_value, timeactive;
+        FILE* startFile = fopen(startFilePath, "r");
+        fscanf(startFile, "%s %s %s %d %d", host_UID, auction_name, asset_fname, &start_value, &timeactive);
+        fclose(startFile);
+
+        // Prepare the initial response
+        char currentDateTime[MAX_BUFFER_SIZE];
+        getCurrentDateTime(currentDateTime);
+        snprintf(response, MAX_BUFFER_SIZE, "RRC OK %s %s %s %d %s %d", host_UID, auction_name, asset_fname, start_value, currentDateTime, timeactive);
+
+        // Check if the auction has received bids
+        char bidsDir[50];
+        snprintf(bidsDir, sizeof(bidsDir), "%s/BIDS", auctionDir);
+
+        DIR* bidsDirPtr = opendir(bidsDir);
+        if (bidsDirPtr != NULL) {
+            struct dirent* entry;
+            while ((entry = readdir(bidsDirPtr)) != NULL) {
+                if (entry->d_type == DT_REG) {  // Regular file
+                    int bid_value = atoi(entry->d_name);
+                    char bidFilePath[100];
+                    snprintf(bidFilePath, sizeof(bidFilePath), "%s/%s", bidsDir, entry->d_name);
+
+                    FILE* bidFile = fopen(bidFilePath, "r");
+                    if (bidFile != NULL) {
+                        char bidder_UID[MAX_BUFFER_SIZE];
+                        char bid_date_time[MAX_BUFFER_SIZE];
+                        int bid_sec_time;
+                        fscanf(bidFile, "%s %d %s %d", bidder_UID, &bid_value, bid_date_time, &bid_sec_time);
+                        fclose(bidFile);
+
+                        // Append bid information to the response
+                        snprintf(response + strlen(response), MAX_BUFFER_SIZE - strlen(response), "\nB %s %d %s %d", bidder_UID, bid_value, bid_date_time, bid_sec_time);
+                    }
+                }
+            }
+            closedir(bidsDirPtr);
+        }
+
+        // Check if the auction is already closed
+        char endFilePath[100];
+        snprintf(endFilePath, sizeof(endFilePath), "%s/END.txt", auctionDir);
+
+        if (fileExists(endFilePath)) {
+            char end_date_time[MAX_BUFFER_SIZE];
+            int end_sec_time;
+            FILE* endFile = fopen(endFilePath, "r");
+            fscanf(endFile, "%s %d", end_date_time, &end_sec_time);
+            fclose(endFile);
+
+            // Append closing information to the response
+            snprintf(response + strlen(response), MAX_BUFFER_SIZE - strlen(response), "\nE %s %d", end_date_time, end_sec_time);
+        }
+    } else {
+        // Auction not found
+        snprintf(response, MAX_BUFFER_SIZE, "RRC NOK");
+    }
 }
 
 void handleLogoutRequest(char* request, char* response, int verbose) {
@@ -693,11 +977,11 @@ void handleLogoutRequest(char* request, char* response, int verbose) {
         // Delete the login file
         removeFile(filePath);
 
-        strcpy(response, "RLO OK");
+        strcpy(response, "RLO OK\n");
     } else if (validation == INVALID_PASSWORD) {// or if was not logged in
-        strcpy(response, "RLO NOK");
+        strcpy(response, "RLO NOK\n");
     } else if (validation == USER_NOT_EXIST) {
-        strcpy(response, "RLO UNR");
+        strcpy(response, "RLO UNR\n");
     }
 }
 
@@ -720,12 +1004,12 @@ void handleUnregisterRequest(char* request, char* response, int verbose) {
         snprintf(loginFile, sizeof(loginFile), "AS/USERS/%s_login.txt", UID);
         removeFile(loginFile);
 
-        strcpy(response, "RUR OK");
+        strcpy(response, "RUR OK\n");
     } else if (validation == USER_NOT_EXIST) {
         // User is not registered
-        strcpy(response, "RUR UNR");
+        strcpy(response, "RUR UNR\n");
     } else {
         // User exists but the password is invalid
-        strcpy(response, "RUR NOK");
+        strcpy(response, "RUR NOK\n");
     }
 }
