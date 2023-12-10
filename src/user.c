@@ -519,6 +519,31 @@ void showRecord(char* AID, char* ASIP, char* ASPort) {
         printf("The auction %s does not exist\n", AID);
     } else {
         printf("Show record %s result: %s", AID, reply); //TODO: more human friendly
+        // Delimiter characters
+        const char *delimiters = "BE";
+
+        char host_UID[7], auction_name[100], asset_fname[100], start_value[100], start_date[100], start_time[100], timeactive[100];
+        char bidder_UID[7], bid_value[100], bid_date[100], bid_time[100], bid_sec_time[100];
+        char end_date[100], end_time[100], end_sec_time[100];
+
+        // Tokenize the string
+        char *token = strtok(reply, delimiters);
+
+        // Process and print tokens
+        while (token != NULL) {
+            printf("Segment: %s\n", token);
+            if(sscanf(token, "RRC OK %s %s %s %s %s %s %s", host_UID, auction_name, asset_fname, start_value, start_date, start_time, timeactive) == 7){
+                printf("AUCTION\n");
+                printf("Host UID: %s\nAuction Name: %s\nAsset Name: %s\nStarting Value: %s\nStarting Date: %s\nStarting Time: %sTime Active: %s\n\n", host_UID, auction_name, asset_fname, start_value, start_date, start_time, timeactive);
+            } else if(sscanf(token, "%s %s %s %s %s", bidder_UID, bid_value, bid_date, bid_time, bid_sec_time) == 5){
+                printf("BID\n");
+                printf("Bidder UID: %s\nBid Value: %s\nBid Date: %s\nBid Time: %s\nBid Time in Seconds: %s\n\n", host_UID, bid_value, bid_date, bid_time, bid_sec_time);
+            } else if(sscanf(token, "%s %s %s", end_date, end_time, end_sec_time) == 3){
+                printf("AUCTION HAS ENDED\n");
+                printf("End Date: %s\nEnd Time: %s\nEnd Time in Seconds: %s\n", end_date, end_time, end_sec_time);
+            }
+            token = strtok(NULL, delimiters);
+        }
     }
 }
 
