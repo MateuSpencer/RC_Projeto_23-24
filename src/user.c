@@ -27,9 +27,11 @@ void unregister(char* UID, char* password, char* ASIP, char* ASPort);
 void exitApplication();
 char *readFile(const char *filename);
 
+extern int errno;
+
 int main(int argc, char *argv[]) {
     char ASIP[50] = "tejo.tecnico.ulisboa.pt"; //TODO WHAT SHOULD BE THE PRESET
-    char ASport[6] = "58011"; //TODO WHAT SHOULD BE THE PRESET
+    char ASport[6] = "58022";
     char input[50];
 
     for (int i = 1; i < argc; i++) {
@@ -57,8 +59,18 @@ int main(int argc, char *argv[]) {
 
         // Compare command and call the corresponding function
         if (strcmp(token, "login") == 0) {
-            scanf("%s %s", UID, password); //TODo, deviamos desasociar se nao for succesful
-            isUserLoggedIn = login(UID, password, ASIP, ASport);
+            char UID_buffer[7];
+            char password_buffer[9];
+            strcpy(UID_buffer,UID);
+            strcpy(password_buffer,password);
+            scanf("%s %s", UID, password);
+            int isUserLoggedInTest = login(UID, password, ASIP, ASport);
+            if(isUserLoggedInTest == 0){
+                strcpy(UID,UID_buffer);
+                strcpy(password,password_buffer);
+            } else {
+                isUserLoggedIn = 1;
+            }
 
         } else if (strcmp(token, "open") == 0) {
             char name[100];
