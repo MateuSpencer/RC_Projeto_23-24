@@ -152,33 +152,19 @@ int UDPMessage(const char* message, char* reply, char* ASPort, char* ASIP) {
         return -1;
     }
 
-    n = sendto(fd, message, strlen(message), 0, res->ai_addr, res->ai_addrlen);
-    if (n == -1) {
-        perror("sendto");
+    ssize_t received;
+    if (sendto(fd, message, strlen(message), 0, res->ai_addr, res->ai_addrlen) != -1 &&
+        (received = recvfrom(fd, reply, MAX_BUFFER_SIZE, 0, (struct sockaddr *)&addr, &addrlen)) > 0) {
+        char* newline_pos = strchr(reply, '\n');
+        if (newline_pos != NULL) {
+            newline_pos++;
+            *newline_pos = '\0';
+        }
         freeaddrinfo(res);
         close(fd);
-        return -1;
+        return n; // Return the number of bytes read
     }
-
-    addrlen = sizeof(addr);
-    n = recvfrom(fd, reply, MAX_BUFFER_SIZE, 0, (struct sockaddr *)&addr, &addrlen);
-    if (n == -1) {
-        perror("recvfrom");
-        freeaddrinfo(res);
-        close(fd);
-        return -1;
-    }
-
-    // Find the position of the newline character in the received data
-    char* newline_pos = strchr(reply, '\n');
-    if (newline_pos != NULL) {
-        newline_pos++;
-        *newline_pos = '\0';
-    }
-
-    freeaddrinfo(res);
-    close(fd);
-    return n; // Return the number of bytes read
+    return -1;
 }
 
 int TCPMessage(const char* message, char* reply, char* ASPort, char* ASIP) {
