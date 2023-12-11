@@ -52,8 +52,7 @@ void handleLogoutRequest(char* request, char* response, int verbose);
 void handleUnregisterRequest(char* request, char* response, int verbose);
 
 
-int main(int argc, char *argv[]) { //TODO take arguments
-    pid_t udpProcess, tcpProcess;
+int main(int argc, char *argv[]) {
     int opt;
     char ASport[6] = "58000"; // TODO: Default value GN
     int verbose = 0; // Verbose mode flag
@@ -73,177 +72,235 @@ int main(int argc, char *argv[]) { //TODO take arguments
         }
     }
 
-    // Create UDP process
-    udpProcess = fork();
-    if (udpProcess < 0) {
-        perror("Error forking UDP process");
+
+    pid_t pid = fork();
+
+    if (pid == -1) {
+        perror("Failed to fork into UDP and TCP listeners");
         exit(EXIT_FAILURE);
-    } else if (udpProcess == 0) {
-        handleUDPRequests(ASport, verbose);
-        exit(EXIT_SUCCESS);
-    }
+    } else if (pid != 0) {
+        // Parent process (UDP listener)
 
-    // Create TCP process
-    tcpProcess = fork();
-    if (tcpProcess < 0) {
-        perror("Error forking TCP process");
-        exit(EXIT_FAILURE);
-    } else if (tcpProcess == 0) {
-        handleTCPRequests(ASport, verbose);
-        exit(EXIT_SUCCESS);
-    }
+        int errcode;
+        ssize_t n;
+        socklen_t addrlen;
+        struct addrinfo hints, *res;
+        struct sockaddr_in addr;
+        char buffer[128];
+        char response[MAX_BUFFER_SIZE];
 
-    // Wait for both child processes to finish
-    waitpid(udpProcess, NULL, 0);
-    waitpid(tcpProcess, NULL, 0);
+        int udpSocket = createUDPSocket();
 
-    return 0;
-}
+        memset(&hints, 0, sizeof hints);
+        hints.ai_family = AF_INET;
+        hints.ai_socktype = SOCK_DGRAM;
+        hints.ai_flags = AI_PASSIVE;
 
-void handleUDPRequests(char* ASPort, int verbose) {
-    int fd, errcode;
-    ssize_t n;
-    socklen_t addrlen;
-    struct addrinfo hints, *res;
-    struct sockaddr_in addr;
-    char buffer[128];
-    char response[MAX_BUFFER_SIZE];
-
-    fd = createUDPSocket();
-
-    memset(&hints, 0, sizeof hints);
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_DGRAM;
-    hints.ai_flags = AI_PASSIVE;
-
-    errcode = getaddrinfo(NULL, ASPort, &hints, &res);
-    if (errcode != 0) {
-        perror("getaddrinfo failed");
-        exit(EXIT_FAILURE);
-    }
-
-    // Bind the socket to the specified address
-    n = bind(fd, res->ai_addr, res->ai_addrlen);
-    if (n == -1) {
-        perror("Bind failed");
-        exit(EXIT_FAILURE);
-    }
-
-    freeaddrinfo(res);
-    addrlen = sizeof(addr);
-    // Loop to receive and process UDP messages
-    while (1) {
-        // Receive data from the client
-        n = recvfrom(fd, buffer, sizeof(buffer), 0, (struct sockaddr *)&addr, &addrlen);
-        if (n == -1) {
-            perror("recvfrom failed");
+        errcode = getaddrinfo(NULL, ASport, &hints, &res);
+        if (errcode != 0) {
+            perror("getaddrinfo failed");
             exit(EXIT_FAILURE);
         }
 
-        char* action = strtok(buffer, " ");
-        char* data = strtok(NULL, "\n");
-    
-        if (strcmp(action, "LIN") == 0) {
-            handleLoginRequest(data, response, verbose);
-        } else if (strcmp(action, "LMA") == 0) {
-            handleMyAuctionsRequest(data, response, verbose);
-        } else if (strcmp(action, "LMB") == 0) {
-            handleMyBidsRequest(data, response, verbose);
-        } else if (strcmp(action, "LST") == 0) {
-            handleListAuctionsRequest(response, verbose);
-        } else if (strcmp(action, "SRC") == 0) {
-            handleShowRecordRequest(data, response, verbose);
-        } else if (strcmp(action, "LOU") == 0) {
-            handleLogoutRequest(data, response, verbose);
-        } else if (strcmp(action, "UNR") == 0) {
-            handleUnregisterRequest(data, response, verbose);
-        } else {
-            //TODO: UNKNOWN
-        }
-
-        /* Envia a resposta para o endereço `addr` de onde foram recebidos dados */
-        n = sendto(fd, response, sizeof(response), 0, (struct sockaddr *)&addr, addrlen);
+        // Bind the socket to the specified address
+        n = bind(udpSocket, res->ai_addr, res->ai_addrlen);
         if (n == -1) {
-            exit(1); //TODO: Better handling
+            perror("Bind failed");
+            exit(EXIT_FAILURE);
         }
-    }
 
-    close(fd);
-}
+        freeaddrinfo(res);
+        addrlen = sizeof(addr);        
+        if (verbose) {
+            printf("[UDP] Listening on port %s\n", ASport);
+        }
 
-void handleTCPRequests(char* ASPort, int verbose) {
-    int fd, newfd, errcode;
-    ssize_t n;
-    socklen_t addrlen;
-    struct addrinfo hints, *res;
-    struct sockaddr_in addr;
-    char buffer[128];
-    char response[MAX_BUFFER_SIZE];  // Assuming MAX_BUFFER_SIZE is defined
+        while (1) {
+            n = recvfrom(udpSocket, buffer, sizeof(buffer), 0, (struct sockaddr *)&addr, &addrlen);
+            if (n <= 0) {
+                perror("Error receiving UDP message");
+                continue;
+            }
+            buffer[n] = '\0';
 
-    fd = createTCPSocket();
+            if (buffer[n - 1] != '\n') {
+                sprintf(response, "ERR\n"); 
+            }else{
+                char* action = strtok(buffer, " ");
+                char* data = strtok(NULL, "\n");
+            
+                if (strcmp(action, "LIN") == 0) {
+                    handleLoginRequest(data, response, verbose);
+                } else if (strcmp(action, "LMA") == 0) {
+                    handleMyAuctionsRequest(data, response, verbose);
+                } else if (strcmp(action, "LMB") == 0) {
+                    handleMyBidsRequest(data, response, verbose);
+                } else if (strcmp(action, "LST") == 0) {
+                    handleListAuctionsRequest(response, verbose);
+                } else if (strcmp(action, "SRC") == 0) {
+                    handleShowRecordRequest(data, response, verbose);
+                } else if (strcmp(action, "LOU") == 0) {
+                    handleLogoutRequest(data, response, verbose);
+                } else if (strcmp(action, "UNR") == 0) {
+                    handleUnregisterRequest(data, response, verbose);
+                } else {
+                    sprintf(response, "ERR\n"); 
+                }
+            }
+            
+            // Envia a resposta para o endereço `addr` de onde foram recebidos dados
+            n = sendto(udpSocket, response, sizeof(response), 0, (struct sockaddr *)&addr, addrlen);
+            if (n == -1) {
+                perror("Error sending UDP message");
+                continue;
+            }
+        }
+        close(udpSocket);
 
-    memset(&hints, 0, sizeof hints);
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_flags = AI_PASSIVE;
+    } else {
+        // Child process (TCP listener)
 
-    errcode = getaddrinfo(NULL, ASPort, &hints, &res);
-    if (errcode != 0) {
-        perror("Error in getaddrinfo");
-        exit(EXIT_FAILURE); //TODO: Better handling in all below
-    }
+        int newfd, errcode;
+        ssize_t n;
+        socklen_t addrlen;
+        struct addrinfo hints, *res;
+        struct sockaddr_in addr;
+        char buffer[128];
+        char response[MAX_BUFFER_SIZE];
 
-    if (bind(fd, res->ai_addr, res->ai_addrlen) == -1) {
-        perror("Error binding TCP socket");
-        exit(EXIT_FAILURE);
-    }
+        int tcpSocket = createTCPSocket();
 
-    if (listen(fd, 5) == -1) {
-        perror("Error listening on TCP socket");
-        exit(EXIT_FAILURE);
-    }
+        memset(&hints, 0, sizeof hints);
+        hints.ai_family = AF_INET;
+        hints.ai_socktype = SOCK_STREAM;
+        hints.ai_flags = AI_PASSIVE;
 
-    while (1) {
+        errcode = getaddrinfo(NULL, ASport, &hints, &res);
+        if (errcode != 0) {
+            perror("Error in getaddrinfo");
+            exit(EXIT_FAILURE); //TODO: Better handling in all below
+        }
+
+        if (bind(tcpSocket, res->ai_addr, res->ai_addrlen) == -1) {
+            perror("Error binding TCP socket");
+            exit(EXIT_FAILURE);
+        }
+
+        if (listen(tcpSocket, 5) == -1) {
+            perror("Error listening on TCP socket");
+            exit(EXIT_FAILURE);
+        }
+
         addrlen = sizeof(addr);
-        newfd = accept(fd, (struct sockaddr *)&addr, &addrlen);
-        if (newfd == -1) {
-            perror("Error accepting TCP connection");
-            exit(EXIT_FAILURE);
-        }
 
-        n = read(newfd, buffer, sizeof(buffer));
-        if (n == -1) {
-            perror("Error reading from TCP socket");
-            exit(EXIT_FAILURE);
-        }
+        while (1) {
 
-        char* action = strtok(buffer, " ");
+            int sessionFd  = accept(tcpSocket, (struct sockaddr *)&addr, &addrlen);
 
-        // Identify the type of request and call the appropriate handler function
-        if (strcmp(action, "LIN") == 0) {
-            handleLoginRequest(buffer, response, verbose);
-        } else if (strcmp(action, "OPA") == 0) {
-            handleOpenAuctionRequest(buffer, response, verbose);
-        } else if (strcmp(action, "CLS") == 0) {
-            handleCloseAuctionRequest(buffer, response, verbose);
-        } else if (strcmp(action, "SAS") == 0) {
-            handleShowAssetRequest(buffer, response, verbose);
-        } else if (strcmp(action, "BID") == 0) {
-            handleBidRequest(buffer, response, verbose);
-        } else {
-            //TODO: UNKNOWN
-        }
+            if (sessionFd == -1) {
+                perror("Error accepting TCP connection");
+                continue;
+            }
 
-        /* Envia a response para a socket */
-        n = write(newfd, response, sizeof(response));
-        if (n == -1) {
-            exit(1);
+            pid_t tcpPid = fork();
+
+            if (tcpPid == -1) {
+                perror("Failed to fork TCP Session");
+            } else if (tcpPid != 0) {
+                // Parent process
+                close(sessionFd);
+                continue;
+            } else {
+                // Child process
+
+                /*TODO: set timeouts
+                setsockopt(sessionFd, SOL_SOCKET, SO_SNDTIMEO, state->timeout, sizeof(*(state->timeout)));
+                setsockopt(sessionFd, SOL_SOCKET, SO_RCVTIMEO, state->timeout, sizeof(*(state->timeout)));
+                */
+                
+
+                size_t alreadyRead = 0;
+                ssize_t n;
+                while (alreadyRead < MAX_BUFFER_SIZE && (n = read(newfd, buffer + alreadyRead, sizeof(char))) > 0) {
+                    alreadyRead += (size_t)n;
+                    if (buffer[alreadyRead - 1] == '\n') {
+                        break;
+                    }
+                }
+
+                char* action = strtok(buffer, " ");
+
+                // Identify the type of request and call the appropriate handler function
+                if (strcmp(action, "LIN") == 0) {
+                    handleLoginRequest(buffer, response, verbose);
+                } else if (strcmp(action, "OPA") == 0) {
+                    handleOpenAuctionRequest(buffer, response, verbose);
+                } else if (strcmp(action, "CLS") == 0) {
+                    handleCloseAuctionRequest(buffer, response, verbose);
+                } else if (strcmp(action, "SAS") == 0) {
+                    handleShowAssetRequest(buffer, response, verbose);
+                } else if (strcmp(action, "BID") == 0) {
+                    handleBidRequest(buffer, response, verbose);
+                } else {
+                    //TODO: UNKNOWN
+                }
+
+                /*
+                // Sends state->out_buffer, followed by the file (if exists), followed by \n
+                int replyTCP(ResponseFile *file, ServerState *state) {
+                    logTraffic(T_RESPONSE, "TCP", file, state);
+
+                    if (writeToTCPSocket(state->socket, state->out_buffer,
+                                        strlen(state->out_buffer)) == -1) {
+                        return -1;
+                    }
+
+                    if (file != NULL) {
+                        sprintf(state->out_buffer, " %s %lu ", file->name, file->size);
+                        if (writeToTCPSocket(state->socket, state->out_buffer,
+                                            strlen(state->out_buffer)) == -1 ||
+                            writeToTCPSocket(state->socket, file->data, file->size) == -1) {
+                            return -1;
+                        }
+                    }
+
+                    char end = '\n';
+                    if (writeToTCPSocket(state->socket, &end, sizeof(char)) == -1) {
+                        retinitTCPSessionSocketurn -1;
+                    }
+
+                    return 0;
+                }
+
+                int writeToTCPSocket(int socket, char *buf, size_t toWrite) {
+                    size_t written = 0;
+
+                    while (written < toWrite) {
+                        ssize_t sent = write(socket, buf + written,
+                                            MIN(TCP_MAX_BLOCK_SIZE, toWrite - written));
+                        if (sent <= 0) {
+                            return -1;
+                        }
+                        written += (size_t)sent;
+                    }
+
+                    return 0;
+                }
+                */
+
+
+                /* Envia a response para a socket */
+                n = write(newfd, response, sizeof(response));
+                if (n == -1) {
+                    exit(1);
+                }
+                close(sessionFd);
+            }
         }
-        close(newfd);
     }
 
-    freeaddrinfo(res);
-    close(fd);
+    //TODO: Wait for proceses?
+    return EXIT_SUCCESS;
 }
 
 
@@ -484,7 +541,7 @@ void handleLoginRequest(char* request, char* response, int verbose) {
     char userDir[50];
     char filename[50];
 
-    char* UID = strtok(NULL, " ");
+    char* UID = strtok(NULL, " ");//TODO: Null??
     char* password = strtok(NULL, " ");
 
     // Validate user existence and password
