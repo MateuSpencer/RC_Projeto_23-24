@@ -19,9 +19,6 @@
 #define USER_NOT_EXIST 1
 #define INVALID_PASSWORD 2
 
-void handleUDPRequests(char* ASPort, int verbose);
-void handleTCPRequests(char* ASPort, int verbose);
-
 void createDirectory(const char *path);
 void createFile(const char *directory, const char *filename);
 void writeFile(const char *filePath, const char *content);
@@ -186,7 +183,7 @@ int main(int argc, char *argv[]) {
             exit(EXIT_FAILURE);
         }
 
-        if (listen(tcpSocket, 5) == -1) {
+        if (listen(tcpSocket, 5) == -1) {//TODO: can hold 5 pending connections? more?
             perror("Error listening on TCP socket");
             exit(EXIT_FAILURE);
         }
@@ -206,12 +203,15 @@ int main(int argc, char *argv[]) {
 
             if (tcpPid == -1) {
                 perror("Failed to fork TCP Session");
+                close(sessionFd);
+                continue;
             } else if (tcpPid != 0) {
                 // Parent process
                 close(sessionFd);
                 continue;
             } else {
                 // Child process
+                close(tcpSocket); //stop listening in child process
 
                 /*TODO: set timeouts
                 setsockopt(sessionFd, SOL_SOCKET, SO_SNDTIMEO, state->timeout, sizeof(*(state->timeout)));
@@ -245,61 +245,33 @@ int main(int argc, char *argv[]) {
                     //TODO: UNKNOWN
                 }
 
-                /*
-                // Sends state->out_buffer, followed by the file (if exists), followed by \n
-                int replyTCP(ResponseFile *file, ServerState *state) {
-                    logTraffic(T_RESPONSE, "TCP", file, state);
+                size_t toWrite = strlen(response);
+                size_t written = 0;
 
-                    if (writeToTCPSocket(state->socket, state->out_buffer,
-                                        strlen(state->out_buffer)) == -1) {
-                        return -1;
+                while (written < toWrite) {
+                    ssize_t sent = write(sessionFd, response + written, MIN(MAX_BUFFER_SIZE, toWrite - written));
+                    if (sent <= 0) {
+                        perror("Failed to write to to TCP Socket");
+                        break;
                     }
-
-                    if (file != NULL) {
-                        sprintf(state->out_buffer, " %s %lu ", file->name, file->size);
-                        if (writeToTCPSocket(state->socket, state->out_buffer,
-                                            strlen(state->out_buffer)) == -1 ||
-                            writeToTCPSocket(state->socket, file->data, file->size) == -1) {
-                            return -1;
-                        }
-                    }
-
-                    char end = '\n';
-                    if (writeToTCPSocket(state->socket, &end, sizeof(char)) == -1) {
-                        retinitTCPSessionSocketurn -1;
-                    }
-
-                    return 0;
+                    written += (size_t)sent;
                 }
 
-                int writeToTCPSocket(int socket, char *buf, size_t toWrite) {
-                    size_t written = 0;
-
-                    while (written < toWrite) {
-                        ssize_t sent = write(socket, buf + written,
-                                            MIN(TCP_MAX_BLOCK_SIZE, toWrite - written));
-                        if (sent <= 0) {
-                            return -1;
-                        }
-                        written += (size_t)sent;
-                    }
-
-                    return 0;
-                }
-                */
-
-
-                /* Envia a response para a socket */
-                n = write(newfd, response, sizeof(response));
-                if (n == -1) {
-                    exit(1);
-                }
                 close(sessionFd);
+                exit(EXIT_SUCCESS);
             }
         }
     }
 
-    //TODO: Wait for proceses?
+    int status;
+    waitpid(-1, &status, 0);
+
+    if (WIFEXITED(status)) {
+        printf("Child process exited with status %d\n", WEXITSTATUS(status));
+    } else {
+        printf("Child process terminated abnormally\n");
+    }
+
     return EXIT_SUCCESS;
 }
 
