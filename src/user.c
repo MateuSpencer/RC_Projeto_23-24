@@ -9,7 +9,29 @@
 #include <string.h>
 #include <errno.h>
 
-#include "communication.h"
+// #include "communication.h"
+
+#define MAX_BUFFER_SIZE 4000
+#define MAX_FILENAME_SIZE 24
+#define MAX_PASSWORD_SIZE 9
+
+int createUDPSocket() {
+    int udpSocket = socket(AF_INET, SOCK_DGRAM, 0);
+    if (udpSocket == -1) {
+        perror("UDP socket creation failed");
+        exit(EXIT_FAILURE);
+    }
+    return udpSocket;
+}
+
+int createTCPSocket() {
+    int tcpSocket = socket(AF_INET, SOCK_STREAM, 0);
+    if (tcpSocket == -1) {
+        perror("TCP socket creation failed");
+        exit(EXIT_FAILURE);
+    }
+    return tcpSocket;
+}
 
 int UDPMessage(const char* message, char* reply, char* ASPort, char* ASIP);
 int TCPMessage(const char* message, char* reply, char* ASPort, char* ASIP, int size);

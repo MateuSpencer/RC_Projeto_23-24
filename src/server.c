@@ -14,13 +14,35 @@
 #include <time.h>
 #include <sys/stat.h>
 
-#include "communication.h"
+// #include "communication.h"
 
 #define VALID_USER 0
 #define USER_NOT_EXIST 1
 #define INVALID_PASSWORD 2
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
+
+#define MAX_BUFFER_SIZE 4000
+#define MAX_FILENAME_SIZE 24
+#define MAX_PASSWORD_SIZE 9
+
+int createUDPSocket() {
+    int udpSocket = socket(AF_INET, SOCK_DGRAM, 0);
+    if (udpSocket == -1) {
+        perror("UDP socket creation failed");
+        exit(EXIT_FAILURE);
+    }
+    return udpSocket;
+}
+
+int createTCPSocket() {
+    int tcpSocket = socket(AF_INET, SOCK_STREAM, 0);
+    if (tcpSocket == -1) {
+        perror("TCP socket creation failed");
+        exit(EXIT_FAILURE);
+    }
+    return tcpSocket;
+}
 
 void createDirectory(const char *path);
 void createFile(const char *directory, const char *filename);
