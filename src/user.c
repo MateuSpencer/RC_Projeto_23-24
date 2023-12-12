@@ -208,7 +208,30 @@ int TCPMessage(const char* message, char* reply, char* ASPort, char* ASIP) {
         written += (size_t)n;
     }
 
-    n = read(fd, reply, MAX_BUFFER_SIZE);
+    size_t alreadyRead = 0;
+    while (1) {
+        errno = 0;
+        ssize_t n = read(fd, reply + alreadyRead, 1 * sizeof(char));
+        if (n <= 0) {
+            perror("read");
+            freeaddrinfo(res);
+            close(fd);
+            return -1;
+        }
+        alreadyRead += (size_t)n;
+
+        if (reply[alreadyRead - 1] == '\n') {
+            break;
+        } else if (alreadyRead >= MAX_BUFFER_SIZE + 1) {
+            perror("read");
+            freeaddrinfo(res);
+            close(fd);
+            return -1;
+        }
+    }
+    reply[alreadyRead - 1] = '\0';
+
+    /*n = read(fd, reply, MAX_BUFFER_SIZE);
     if (n == -1) {
         perror("read");
         freeaddrinfo(res);
@@ -221,11 +244,11 @@ int TCPMessage(const char* message, char* reply, char* ASPort, char* ASIP) {
     if (newline_pos != NULL) {
         newline_pos++;
         *newline_pos = '\0';
-    }
+    }*/
 
     freeaddrinfo(res);
     close(fd);
-    return n; // Return the number of bytes read
+    return (ssize_t)alreadyRead; // Return the number of bytes read
 }
 
 // User Actions Functions
