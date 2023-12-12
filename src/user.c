@@ -23,7 +23,7 @@ void showAsset(char* AID, char* ASIP, char* ASPort);
 void bid(char* UID, char* password, char* AID, char* value, char* ASIP, char* ASPort);
 void showRecord(char* AID, char* ASIP, char* ASPort);
 int logout(char* UID, char* password, char* ASIP, char* ASPort, int isUserLoggedIn);
-void unregister(char* UID, char* password, char* ASIP, char* ASPort);
+void unregister(char* UID, char* password, char* ASIP, char* ASPort, int isUserLoggedIn);
 void exitApplication();
 char *readFile(const char *filename);
 
@@ -115,7 +115,7 @@ int main(int argc, char *argv[]) {
             //TODO limpar UID e password?
 
         } else if (strcmp(token, "unregister") == 0) {
-            unregister(UID, password, ASIP, ASport);
+            unregister(UID, password, ASIP, ASport, isUserLoggedIn);
 
         } else if (strcmp(token, "exit") == 0) {
             if(isUserLoggedIn == 0){
@@ -203,7 +203,7 @@ int TCPMessage(const char* message, char* reply, char* ASPort, char* ASIP) {
         return -1;
     }
 
-n = read(fd, reply, MAX_BUFFER_SIZE);
+    n = read(fd, reply, MAX_BUFFER_SIZE);
     if (n == -1) {
         perror("read");
         freeaddrinfo(res);
@@ -556,7 +556,7 @@ int logout(char* UID, char* password, char* ASIP, char* ASPort, int isUserLogged
     return -1;
 }
 
-void unregister(char* UID, char* password, char* ASIP, char* ASPort) {
+void unregister(char* UID, char* password, char* ASIP, char* ASPort, int isUserLoggedIn) {
     char message[MAX_BUFFER_SIZE];
     snprintf(message, sizeof(message), "UNR %s %s\n", UID, password);
 
@@ -569,6 +569,7 @@ void unregister(char* UID, char* password, char* ASIP, char* ASPort) {
     // Process reply and display results
     if(strcmp(reply, "RUR OK\n") == 0){
         printf("Unregister Result: Successful!\n");
+        isUserLoggedIn = 0;
     } else if (strcmp(reply, "RUR NOK\n") == 0){
         printf("Unregister Result: Unsuccessful, user is not logged in\n");
     } else if(strcmp(reply, "RUR UNR\n") == 0){
