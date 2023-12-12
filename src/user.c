@@ -195,12 +195,17 @@ int TCPMessage(const char* message, char* reply, char* ASPort, char* ASIP) {
         return -1;
     }
 
-    n = write(fd, message, strlen(message));
-    if (n == -1) {
-        perror("write");
-        freeaddrinfo(res);
-        close(fd);
-        return -1;
+    size_t toWrite = strlen(message);
+    size_t written = 0;
+    while (written < toWrite) {
+        ssize_t n = write(fd, message + written, toWrite - written);
+        if (n <= 0) {
+            perror("write");
+            freeaddrinfo(res);
+            close(fd);
+            return -1;
+        }
+        written += (size_t)n;
     }
 
     n = read(fd, reply, MAX_BUFFER_SIZE);
