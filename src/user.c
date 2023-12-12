@@ -168,7 +168,7 @@ int UDPMessage(const char* message, char* reply, char* ASPort, char* ASIP) {
     hints.ai_family = AF_INET;      // IPv4
     hints.ai_socktype = SOCK_DGRAM; // UDP socket
 
-    errcode = getaddrinfo(ASPort, ASIP, &hints, &res);
+    errcode = getaddrinfo(ASIP, ASPort, &hints, &res);
     if (errcode != 0) {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(errcode));
         close(fd);
@@ -203,7 +203,7 @@ int TCPMessage(const char* message, char* reply, char* ASPort, char* ASIP, int s
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM; // TCP socket
 
-    errcode = getaddrinfo(ASPort, ASIP, &hints, &res);
+    errcode = getaddrinfo(ASIP, ASPort, &hints, &res);
     if (errcode != 0) {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(errcode));
         close(fd);
@@ -281,7 +281,7 @@ int login(char* UID, char* password, char* ASIP, char* ASPort) {
 
     //envia mensagem
     char reply[MAX_BUFFER_SIZE];
-    int n = UDPMessage(loginMessage, reply, ASIP, ASPort);
+    int n = UDPMessage(loginMessage, reply, ASPort, ASIP);
     if (n == -1){
         printf("Error sending message\n");
         return -1;
@@ -331,7 +331,7 @@ void openAuction(char* UID, char* password, char* name, char* asset_fname, char*
 
     // Send open auction message
     char reply[MAX_BUFFER_SIZE];
-    TCPMessage(openAuctionMessage, reply, ASIP, ASPort, fsize);
+    TCPMessage(openAuctionMessage, reply, ASPort, ASIP, fsize);
 
     // Process reply and display results
     if (strncmp(reply, "ROA OK", 6) == 0) {
@@ -387,7 +387,7 @@ void closeAuction(char* UID, char* password, char* AID, char* ASIP, char* ASPort
 
     // Send close auction message
     char reply[MAX_BUFFER_SIZE];
-    TCPMessage(closeAuctionMessage, reply, ASIP, ASPort, 0);
+    TCPMessage(closeAuctionMessage, reply, ASPort, ASIP, 0);
 
     // Process reply and display results
     if (strncmp(reply, "RCL OK", 6) == 0) {
@@ -409,7 +409,7 @@ void myAuctions(char* UID, char* ASIP, char* ASPort) {
     snprintf(message, sizeof(message), "LMA %s\n", UID);
 
     char reply[MAX_BUFFER_SIZE];
-    UDPMessage(message, reply, ASIP, ASPort);
+    UDPMessage(message, reply, ASPort, ASIP);
 
     // Process reply and display results
     if (strcmp(reply, "RMA NOK\n") == 0){
@@ -462,7 +462,7 @@ void myBids(char* UID, char* ASIP, char* ASPort) {
     snprintf(message, sizeof(message), "LMB %s\n", UID);
 
     char reply[MAX_BUFFER_SIZE];
-    UDPMessage(message, reply, ASIP, ASPort);
+    UDPMessage(message, reply, ASPort, ASIP);
 
     // Process reply and display results
     if (strcmp(reply, "RMB NOK\n") == 0){
@@ -517,7 +517,7 @@ void listAuctions(char* ASIP, char* ASPort) {
 
     //envia mensagem
     char reply[MAX_BUFFER_SIZE];
-    UDPMessage(message, reply, ASIP, ASPort);
+    UDPMessage(message, reply, ASPort, ASIP);
 
     // Process reply and display results
     if(strcmp(reply, "RLS NOK\n") == 0){
@@ -534,7 +534,7 @@ void showAsset(char* AID, char* ASIP, char* ASPort) {
     snprintf(showAssetMessage, sizeof(showAssetMessage), "SAS %s", AID);
 
     char reply[MAX_BUFFER_SIZE];
-    TCPMessage(showAssetMessage, reply, ASIP, ASPort, 0);
+    TCPMessage(showAssetMessage, reply, ASPort, ASIP, 0);
 
     // Process reply and display results
     if (strncmp(reply, "RSA OK", 6) == 0) {
@@ -560,7 +560,7 @@ void bid(char* UID, char* password, char* AID, char* value, char* ASIP, char* AS
     snprintf(bidMessage, sizeof(bidMessage), "BID %s %s %s %s\n", UID, password, AID, value);
 
     char reply[MAX_BUFFER_SIZE];
-    TCPMessage(bidMessage, reply, ASIP, ASPort, 0);
+    TCPMessage(bidMessage, reply, ASPort, ASIP, 0);
 
     // Process reply and display results
     if (strncmp(reply, "RBD ACC", 7) == 0) {
@@ -587,7 +587,7 @@ void showRecord(char* AID, char* ASIP, char* ASPort) {
 
     //envia mensagem
     char reply[MAX_BUFFER_SIZE];
-    UDPMessage(message, reply, ASIP, ASPort);
+    UDPMessage(message, reply, ASPort, ASIP);
 
     // Process reply and display results
     if(strcmp(reply, "RRC NOK\n") == 0){
@@ -628,7 +628,7 @@ int logout(char* UID, char* password, char* ASIP, char* ASPort, int isUserLogged
 
     //envia mensagem
     char reply[MAX_BUFFER_SIZE];
-    UDPMessage(message, reply, ASIP, ASPort);
+    UDPMessage(message, reply, ASPort, ASIP);
 
     // Process reply and display results
     if(strcmp(reply, "RLO OK\n") == 0){
@@ -653,7 +653,7 @@ void unregister(char* UID, char* password, char* ASIP, char* ASPort, int isUserL
 
     //envia mensagem
     char reply[MAX_BUFFER_SIZE];
-    UDPMessage(message, reply, ASIP, ASPort);
+    UDPMessage(message, reply, ASPort, ASIP);
 
     // Process reply and display results
     if(strcmp(reply, "RUR OK\n") == 0){
