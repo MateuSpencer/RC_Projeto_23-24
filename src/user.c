@@ -7,6 +7,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <string.h>
+#include <errno.h>
 
 #include "communication.h"
 
@@ -24,7 +25,6 @@ void bid(char* UID, char* password, char* AID, char* value, char* ASIP, char* AS
 void showRecord(char* AID, char* ASIP, char* ASPort);
 int logout(char* UID, char* password, char* ASIP, char* ASPort, int isUserLoggedIn);
 void unregister(char* UID, char* password, char* ASIP, char* ASPort, int isUserLoggedIn);
-void exitApplication();
 char *readFile(const char *filename);
 
 extern int errno;
@@ -32,7 +32,6 @@ extern int errno;
 int main(int argc, char *argv[]) {
     char ASIP[50] = "tejo.tecnico.ulisboa.pt"; //TODO: Should be NULL, like in the server, so it is local
     char ASport[6] = "58022";
-    char input[50];
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-n") == 0 && i + 1 < argc) {
@@ -134,7 +133,6 @@ int main(int argc, char *argv[]) {
 
 int UDPMessage(const char* message, char* reply, char* ASPort, char* ASIP) {
     int fd, errcode;
-    ssize_t n;
     socklen_t addrlen;
     struct addrinfo hints, *res;
     struct sockaddr_in addr;
@@ -162,7 +160,7 @@ int UDPMessage(const char* message, char* reply, char* ASPort, char* ASIP) {
         }
         freeaddrinfo(res);
         close(fd);
-        return n; // Return the number of bytes read
+        return received; // Return the number of bytes read
     }
     return -1;
 }
@@ -170,9 +168,7 @@ int UDPMessage(const char* message, char* reply, char* ASPort, char* ASIP) {
 int TCPMessage(const char* message, char* reply, char* ASPort, char* ASIP) {
     int fd, errcode;
     ssize_t n;
-    socklen_t addrlen;
     struct addrinfo hints, *res;
-    struct sockaddr_in addr;
 
     fd = createTCPSocket();
 
@@ -342,7 +338,7 @@ char *readFile(const char *filename) {
         return NULL;
     }
 
-    if (fread(buffer, 1, fileSize, file) != fileSize) {
+    if (fread(buffer, 1, fileSize, file) != fileSize) { //TODO: Warning: warning: comparison of integer expressions of different signedness: ‘size_t’ {aka ‘long unsigned int’} and ‘long int’ [-Wsign-compare]
         perror("Error reading file");
         free(buffer);
         fclose(file);
@@ -584,7 +580,7 @@ int logout(char* UID, char* password, char* ASIP, char* ASPort, int isUserLogged
     return -1;
 }
 
-void unregister(char* UID, char* password, char* ASIP, char* ASPort, int isUserLoggedIn) {
+void unregister(char* UID, char* password, char* ASIP, char* ASPort, int isUserLoggedIn) { //TODO: isUserLoggedIn not used
     char message[MAX_BUFFER_SIZE];
     snprintf(message, sizeof(message), "UNR %s %s\n", UID, password);
 

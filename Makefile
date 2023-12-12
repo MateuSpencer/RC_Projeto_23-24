@@ -1,30 +1,24 @@
 CC = gcc
-DEBUG_FLAGS = -g -DDEBUG=1
 CFLAGS = -Wall -Wextra
-TARGET = ./src/Cache.elf
-INCLUDE_DIR = ../lib/include
+SOURCES_SERVER = src/server.c src/communication.c
+SOURCES_USER = src/user.c src/communication.c
+OBJECTS_SERVER = $(SOURCES_SERVER:src/%.c=%.o)
+OBJECTS_USER = $(SOURCES_USER:src/%.c=%.o)
+EXECUTABLE_SERVER = server
+EXECUTABLE_USER = user
 
+all: $(EXECUTABLE_SERVER) $(EXECUTABLE_USER)
 
-INCLUDE_HEADER_DEPS := $(shell find $(INCLUDE_DIR) -type f -name '*.h')
-HEADER_DEPS := $(shell find ./src -type f -name '*.h')
-CFILES := $(shell find ./src -type f -name '*.c')
-OBJ := $(CFILES:.c=.o)
+$(EXECUTABLE_SERVER): $(OBJECTS_SERVER)
+	$(CC) $(OBJECTS_SERVER) -o $(EXECUTABLE_SERVER)
 
+$(EXECUTABLE_USER): $(OBJECTS_USER)
+	$(CC) $(OBJECTS_USER) -o $(EXECUTABLE_USER)
 
-%.o: %.c $(INCLUDE_HEADER_DEPS) $(HEADER_DEPS) Makefile
-	$(CC) $(CFLAGS) -c -I $(INCLUDE_DIR) $< -o $@
+%.o: src/%.c
+	$(CC) $(CFLAGS) -c $< -o $@
 
-$(TARGET): $(OBJ)
-	$(CC) $(CFLAGS) $(OBJ) -o $(TARGET)
-
-
-.PHONY: all
-all: $(TARGET)
-
-.PHONY: run
-run: $(TARGET)
-	./$(TARGET)
-
-.PHONY: clean
 clean:
-	rm -f $(TARGET) ./src/*.o ./src/*.elf
+	rm -f *.o $(EXECUTABLE_SERVER) $(EXECUTABLE_USER)
+
+.PHONY: all clean

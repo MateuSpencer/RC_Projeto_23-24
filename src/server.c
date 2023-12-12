@@ -7,6 +7,7 @@
 #include <dirent.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/wait.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
@@ -18,6 +19,8 @@
 #define VALID_USER 0
 #define USER_NOT_EXIST 1
 #define INVALID_PASSWORD 2
+
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 void createDirectory(const char *path);
 void createFile(const char *directory, const char *filename);
@@ -182,8 +185,7 @@ int main(int argc, char *argv[]) {
         // Child process (TCP listener)
 
         // Variable declarations
-        int newfd, errcode;
-        ssize_t n;
+        int errcode;
         socklen_t addrlen;
         struct addrinfo hints, *res;
         struct sockaddr_in addr;
@@ -255,7 +257,7 @@ int main(int argc, char *argv[]) {
                 // Read data from the client
                 size_t alreadyRead = 0;
                 ssize_t n;
-                while (alreadyRead < MAX_BUFFER_SIZE && (n = read(newfd, buffer + alreadyRead, sizeof(char))) > 0) {
+                while (alreadyRead < MAX_BUFFER_SIZE && (n = read(sessionFd, buffer + alreadyRead, sizeof(char))) > 0) {
                     alreadyRead += (size_t)n;
                     if (buffer[alreadyRead - 1] == '\n') {
                         break;
@@ -552,7 +554,11 @@ void handleLoginRequest(char* request, char* response, int verbose) {
     char userDir[50];
     char filename[50];
 
-    char* UID = strtok(NULL, " ");//TODO: Null??
+    if (verbose) {
+        printf("Request received: %s\n", request);
+    }
+
+    char* UID = strtok(request, " ");
     char* password = strtok(NULL, " ");
 
     // Validate user existence and password
@@ -600,7 +606,11 @@ void handleLoginRequest(char* request, char* response, int verbose) {
 
 //TODO: como e quando encerrar o leilao com limite de tempo?
 void handleOpenAuctionRequest(char *request, char *response, int verbose) {
-    char *UID = strtok(NULL, " ");
+    if (verbose) {
+        printf("Request received: %s\n", request);
+    }
+
+    char *UID = strtok(request, " ");
     char *password = strtok(NULL, " ");
     char *name = strtok(NULL, " ");
     char *start_value_str = strtok(NULL, " ");
@@ -611,14 +621,14 @@ void handleOpenAuctionRequest(char *request, char *response, int verbose) {
 
     int start_value = atoi(start_value_str);
     int timeactive = atoi(timeactive_str);
-    int Fsize = atoi(Fsize_str);
+    int Fsize = atoi(Fsize_str); //TODO: unused
 
     int validation = validateUser(UID, password);
 
     if (validation == VALID_USER) {
         // Valid user
         int AID = newAIDdirectory();
-        if (AID =! -1) {
+        if (AID != -1) {
             // Create START file
             char startFilePath[100];
             snprintf(startFilePath, sizeof(startFilePath), "AS/AUCTIONS/%d/START.txt", AID);
@@ -667,7 +677,11 @@ void handleOpenAuctionRequest(char *request, char *response, int verbose) {
 }
 
 void handleCloseAuctionRequest(char* request, char* response, int verbose) {
-    char* UID = strtok(NULL, " ");
+    if (verbose) {
+        printf("Request received: %s\n", request);
+    }
+
+    char* UID = strtok(request, " ");
     char* password = strtok(NULL, " ");
     char* AID_str = strtok(NULL, " ");
 
@@ -710,11 +724,15 @@ void handleCloseAuctionRequest(char* request, char* response, int verbose) {
 }
 
 void handleMyAuctionsRequest(char* request, char* response, int verbose) {
-    char* UID = strtok(NULL, " ");
+    if (verbose) {
+        printf("Request received: %s\n", request);
+    }
+
+    char* UID = strtok(request, " ");
 
     // Prepare string to store AID and state information
     char aidStateString[MAX_BUFFER_SIZE];
-    snprintf(aidStateString, sizeof(aidStateString), "");
+    memset(aidStateString, 0, sizeof(aidStateString));
 
     // Check if the user directory exists
     char userDir[50];
@@ -771,7 +789,11 @@ void handleMyAuctionsRequest(char* request, char* response, int verbose) {
 }
 
 void handleMyBidsRequest(char* request, char* response, int verbose) {
-    char* UID = strtok(NULL, " ");
+    if (verbose) {
+        printf("Request received: %s\n", request);
+    }
+
+    char* UID = strtok(request, " ");
 
     int loggedIn = validateUserLoggedIn(UID);
 
@@ -817,9 +839,12 @@ void handleMyBidsRequest(char* request, char* response, int verbose) {
 }
 
 void handleListAuctionsRequest(char* response, int verbose) {
+    if (verbose) {
+        printf("Request received: LST\n");
+    }
     // Prepare string to store AID and state information
     char aidStateString[MAX_BUFFER_SIZE];
-    snprintf(aidStateString, sizeof(aidStateString), "");
+    memset(aidStateString, 0, sizeof(aidStateString));
 
     // Open the AUCTIONS directory
     DIR* auctionsDirPtr = opendir("AS/AUCTIONS");
@@ -854,7 +879,11 @@ void handleListAuctionsRequest(char* response, int verbose) {
 }
 
 void handleShowAssetRequest(char* request, char* response, int verbose) {
-    char* AID_str = strtok(NULL, " ");
+    if (verbose) {
+        printf("Request received: %s\n", request);
+    }
+
+    char* AID_str = strtok(request, " ");
     int AID = atoi(AID_str);
 
     char auctionDir[50];
@@ -906,7 +935,11 @@ void handleShowAssetRequest(char* request, char* response, int verbose) {
 }
 
 void handleBidRequest(char* request, char* response, int verbose) {
-    char* UID = strtok(NULL, " ");
+    if (verbose) {
+        printf("Request received: %s\n", request);
+    }
+
+    char* UID = strtok(request, " ");
     char* password = strtok(NULL, " ");
     char* AID_str = strtok(NULL, " ");
     char* value_str = strtok(NULL, " ");
@@ -955,7 +988,11 @@ void handleBidRequest(char* request, char* response, int verbose) {
 }
 
 void handleShowRecordRequest(char* request, char* response, int verbose) { //TODO: not very well chcked came from chatGPT, não sei como vai funcionar mandar a a mensagems e o protocolo tem \n e é suposto acabar em \n
-    char* AID_str = strtok(NULL, " ");
+    if (verbose) {
+        printf("Request received: %s\n", request);
+    }
+    
+    char* AID_str = strtok(request, " ");
     int AID = atoi(AID_str);
 
     char auctionDir[50];
@@ -1028,7 +1065,11 @@ void handleShowRecordRequest(char* request, char* response, int verbose) { //TOD
 }
 
 void handleLogoutRequest(char* request, char* response, int verbose) {
-    char* UID = strtok(NULL, " ");
+    if (verbose) {
+        printf("Request received: %s\n", request);
+    }
+
+    char* UID = strtok(request, " ");
     char* password = strtok(NULL, " ");
 
     // Validate user existence and password
@@ -1054,7 +1095,10 @@ void handleLogoutRequest(char* request, char* response, int verbose) {
 }
 
 void handleUnregisterRequest(char* request, char* response, int verbose) {
-    char* UID = strtok(NULL, " ");
+    if (verbose) {
+        printf("Request received: %s\n", request);
+    }
+    char* UID = strtok(request, " ");
     char* password = strtok(NULL, " ");
 
     // Validate user existence and password
