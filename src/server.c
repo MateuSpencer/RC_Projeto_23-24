@@ -51,50 +51,59 @@ void handleUnregisterRequest(char* request, char* response, int verbose);
 
 int main(int argc, char *argv[]) {
     int opt;
-    char ASport[6] = "58000"; // TODO: Default value GN
+    char ASport[6] = "58022";
     int verbose = 0; // Verbose mode flag
 
     // Parse command-line arguments
     while ((opt = getopt(argc, argv, "p:v")) != -1) {
         switch (opt) {
         case 'p':
+            // If port number is provided, update ASport
             snprintf(ASport, sizeof(ASport), "%s", optarg);
             break;
         case 'v':
+            // If verbose flag is provided, set verbose to 1
             verbose = 1;
             break;
         default:
+            // If invalid arguments are provided, print usage and exit
             fprintf(stderr, "Usage: %s [-p ASport] [-v]\n", argv[0]);
             exit(EXIT_FAILURE);
         }
     }
 
-
+    // Fork a new process
     pid_t pid = fork();
 
     if (pid == -1) {
+        // If fork fails, print error and exit
         perror("Failed to fork into UDP and TCP listeners");
         exit(EXIT_FAILURE);
     } else if (pid != 0) {
-        // Parent process (UDP listener)
+        // Parent process will handle UDP requests
 
+        // Variable declarations
         int errcode;
         ssize_t n;
         socklen_t addrlen;
         struct addrinfo hints, *res;
         struct sockaddr_in addr;
-        char buffer[128];
+        char udpBuffer[128];//should this be as big as MAX_BUFFER_SIZE?
         char response[MAX_BUFFER_SIZE];
 
+        // Create a UDP socket
         int udpSocket = createUDPSocket();
 
+        // Set up hints for getaddrinfo
         memset(&hints, 0, sizeof hints);
         hints.ai_family = AF_INET;
         hints.ai_socktype = SOCK_DGRAM;
         hints.ai_flags = AI_PASSIVE;
 
+        // Get address info
         errcode = getaddrinfo(NULL, ASport, &hints, &res);
         if (errcode != 0) {
+            // If getaddrinfo fails, print error and exit
             perror("getaddrinfo failed");
             exit(EXIT_FAILURE);
         }
@@ -102,30 +111,44 @@ int main(int argc, char *argv[]) {
         // Bind the socket to the specified address
         n = bind(udpSocket, res->ai_addr, res->ai_addrlen);
         if (n == -1) {
+            // If bind fails, print error and exit
             perror("Bind failed");
             exit(EXIT_FAILURE);
         }
 
+        // Free the address info struct
         freeaddrinfo(res);
-        addrlen = sizeof(addr);        
+
+        // Set up the address length
+        addrlen = sizeof(addr);
+
+        // If verbose mode is on, print the listening port
         if (verbose) {
             printf("[UDP] Listening on port %s\n", ASport);
         }
 
+        // Main loop to handle incoming requests
         while (1) {
-            n = recvfrom(udpSocket, buffer, sizeof(buffer), 0, (struct sockaddr *)&addr, &addrlen);
+            // Receive data from the client
+            n = recvfrom(udpSocket, udpBuffer, sizeof(udpBuffer), 0, (struct sockaddr *)&addr, &addrlen);
             if (n <= 0) {
+                // If recvfrom fails, print error and continue to the next iteration
                 perror("Error receiving UDP message");
                 continue;
             }
-            buffer[n] = '\0';
+            // Null-terminate the received data
+            udpBuffer[n] = '\0';
 
-            if (buffer[n - 1] != '\n') {
+            // Process the received data
+            if (udpBuffer[n - 1] != '\n') {
+                // If the last character is not a newline, send an error response
                 sprintf(response, "ERR\n"); 
-            }else{
-                char* action = strtok(buffer, " ");
+            } else {
+                // Otherwise, parse the action and data from the received message
+                char* action = strtok(udpBuffer, " ");
                 char* data = strtok(NULL, "\n");
-            
+
+                // Handle the action
                 if (strcmp(action, "LIN") == 0) {
                     handleLoginRequest(data, response, verbose);
                 } else if (strcmp(action, "LMA") == 0) {
@@ -141,22 +164,24 @@ int main(int argc, char *argv[]) {
                 } else if (strcmp(action, "UNR") == 0) {
                     handleUnregisterRequest(data, response, verbose);
                 } else {
+                    // If the action is unknown, send an error response
                     sprintf(response, "ERR\n"); 
                 }
             }
-            
-            // Envia a resposta para o endereço `addr` de onde foram recebidos dados
+            // Send the response to the client
             n = sendto(udpSocket, response, sizeof(response), 0, (struct sockaddr *)&addr, addrlen);
             if (n == -1) {
+                // If sendto fails, print error and continue to the next iteration
                 perror("Error sending UDP message");
                 continue;
             }
         }
+        // Close the socket
         close(udpSocket);
-
     } else {
         // Child process (TCP listener)
 
+        // Variable declarations
         int newfd, errcode;
         ssize_t n;
         socklen_t addrlen;
@@ -165,60 +190,69 @@ int main(int argc, char *argv[]) {
         char buffer[128];
         char response[MAX_BUFFER_SIZE];
 
+        // Create a TCP socket
         int tcpSocket = createTCPSocket();
 
+        // Set up hints for getaddrinfo
         memset(&hints, 0, sizeof hints);
         hints.ai_family = AF_INET;
         hints.ai_socktype = SOCK_STREAM;
         hints.ai_flags = AI_PASSIVE;
 
+        // Get address info
         errcode = getaddrinfo(NULL, ASport, &hints, &res);
         if (errcode != 0) {
+            // If getaddrinfo fails, print error and exit
             perror("Error in getaddrinfo");
-            exit(EXIT_FAILURE); //TODO: Better handling in all below
+            exit(EXIT_FAILURE);
         }
 
+        // Bind the socket to the specified address
         if (bind(tcpSocket, res->ai_addr, res->ai_addrlen) == -1) {
+            // If bind fails, print error and exit
             perror("Error binding TCP socket");
             exit(EXIT_FAILURE);
         }
 
-        if (listen(tcpSocket, 5) == -1) {//TODO: can hold 5 pending connections? more?
+        // Listen for incoming connections
+        if (listen(tcpSocket, 5) == -1) { //TODO: only 5 waiting requests?
+            // If listen fails, print error and exit
             perror("Error listening on TCP socket");
             exit(EXIT_FAILURE);
         }
 
+        // Set up the address length
         addrlen = sizeof(addr);
 
+        // Main loop to handle incoming connections
         while (1) {
-
+            // Accept a new connection
             int sessionFd  = accept(tcpSocket, (struct sockaddr *)&addr, &addrlen);
 
             if (sessionFd == -1) {
+                // If accept fails, print error and continue to the next iteration
                 perror("Error accepting TCP connection");
                 continue;
             }
 
+            // Fork a new process to handle the connection
             pid_t tcpPid = fork();
 
             if (tcpPid == -1) {
+                // If fork fails, print error, close the connection, and continue to the next iteration
                 perror("Failed to fork TCP Session");
                 close(sessionFd);
                 continue;
             } else if (tcpPid != 0) {
                 // Parent process
+                // Close the connection and continue to the next iteration
                 close(sessionFd);
                 continue;
             } else {
                 // Child process
-                close(tcpSocket); //stop listening in child process
-
-                /*TODO: set timeouts
-                setsockopt(sessionFd, SOL_SOCKET, SO_SNDTIMEO, state->timeout, sizeof(*(state->timeout)));
-                setsockopt(sessionFd, SOL_SOCKET, SO_RCVTIMEO, state->timeout, sizeof(*(state->timeout)));
-                */
-                
-
+                // Close the listening socket
+                close(tcpSocket);
+                // Read data from the client
                 size_t alreadyRead = 0;
                 ssize_t n;
                 while (alreadyRead < MAX_BUFFER_SIZE && (n = read(newfd, buffer + alreadyRead, sizeof(char))) > 0) {
@@ -228,9 +262,10 @@ int main(int argc, char *argv[]) {
                     }
                 }
 
+                // Parse the action from the received data
                 char* action = strtok(buffer, " ");
 
-                // Identify the type of request and call the appropriate handler function
+                // Handle the action
                 if (strcmp(action, "LIN") == 0) {
                     handleLoginRequest(buffer, response, verbose);
                 } else if (strcmp(action, "OPA") == 0) {
@@ -242,30 +277,34 @@ int main(int argc, char *argv[]) {
                 } else if (strcmp(action, "BID") == 0) {
                     handleBidRequest(buffer, response, verbose);
                 } else {
-                    //TODO: UNKNOWN
+                    // If the action is unknown, send an error response
+                    sprintf(response, "ERR\n"); 
                 }
 
+                // Send the response to the client
                 size_t toWrite = strlen(response);
                 size_t written = 0;
-
                 while (written < toWrite) {
                     ssize_t sent = write(sessionFd, response + written, MIN(MAX_BUFFER_SIZE, toWrite - written));
                     if (sent <= 0) {
+                        // If write fails, print error and break the loop
                         perror("Failed to write to to TCP Socket");
                         break;
                     }
                     written += (size_t)sent;
                 }
-
+                // Close the connection and exit
                 close(sessionFd);
                 exit(EXIT_SUCCESS);
             }
         }
     }
 
+    // Wait for the child process to finish
     int status;
     waitpid(-1, &status, 0);
 
+    // Check the exit status of the child process
     if (WIFEXITED(status)) {
         printf("Child process exited with status %d\n", WEXITSTATUS(status));
     } else {

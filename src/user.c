@@ -30,7 +30,7 @@ char *readFile(const char *filename);
 extern int errno;
 
 int main(int argc, char *argv[]) {
-    char ASIP[50] = "tejo.tecnico.ulisboa.pt"; //TODO WHAT SHOULD BE THE PRESET
+    char ASIP[50] = "tejo.tecnico.ulisboa.pt"; //TODO: Should be NULL, like in the server, so it is local
     char ASport[6] = "58022";
     char input[50];
 
