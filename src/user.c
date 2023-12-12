@@ -12,7 +12,7 @@
 #include "communication.h"
 
 int UDPMessage(const char* message, char* reply, char* ASPort, char* ASIP);
-int TCPMessage(const char* message, char* reply, char* ASPort, char* ASIP);
+int TCPMessage(const char* message, char* reply, char* ASPort, char* ASIP, int size);
 
 int login(char* UID, char* password, char* ASIP, char* ASPort);
 void openAuction(char* UID, char* password, char* name, char* asset_fname, char* start_value, char* timeactive,char* ASIP, char* ASPort);
@@ -25,13 +25,15 @@ void bid(char* UID, char* password, char* AID, char* value, char* ASIP, char* AS
 void showRecord(char* AID, char* ASIP, char* ASPort);
 int logout(char* UID, char* password, char* ASIP, char* ASPort, int isUserLoggedIn);
 void unregister(char* UID, char* password, char* ASIP, char* ASPort, int isUserLoggedIn);
+void exitApplication();
 char *readFile(const char *filename);
 
 extern int errno;
 
 int main(int argc, char *argv[]) {
-    char ASIP[50] = "tejo.tecnico.ulisboa.pt"; //TODO: Should be NULL, like in the server, so it is local
+    char ASIP[50] = "tejo.tecnico.ulisboa.pt"; //TODO WHAT SHOULD BE THE PRESET
     char ASport[6] = "58022";
+    char input[50];
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-n") == 0 && i + 1 < argc) {
@@ -133,6 +135,7 @@ int main(int argc, char *argv[]) {
 
 int UDPMessage(const char* message, char* reply, char* ASPort, char* ASIP) {
     int fd, errcode;
+    ssize_t n;
     socklen_t addrlen;
     struct addrinfo hints, *res;
     struct sockaddr_in addr;
@@ -160,15 +163,17 @@ int UDPMessage(const char* message, char* reply, char* ASPort, char* ASIP) {
         }
         freeaddrinfo(res);
         close(fd);
-        return received; // Return the number of bytes read
+        return n; // Return the number of bytes read
     }
     return -1;
 }
 
-int TCPMessage(const char* message, char* reply, char* ASPort, char* ASIP) {
+int TCPMessage(const char* message, char* reply, char* ASPort, char* ASIP, int size) {
     int fd, errcode;
     ssize_t n;
+    socklen_t addrlen;
     struct addrinfo hints, *res;
+    struct sockaddr_in addr;
 
     fd = createTCPSocket();
 
@@ -191,7 +196,7 @@ int TCPMessage(const char* message, char* reply, char* ASPort, char* ASIP) {
         return -1;
     }
 
-    size_t toWrite = strlen(message);
+    size_t toWrite = strlen(message)+size;
     size_t written = 0;
     while (written < toWrite) {
         ssize_t n = write(fd, message + written, toWrite - written);
@@ -277,7 +282,7 @@ int login(char* UID, char* password, char* ASIP, char* ASPort) {
 }
 
 void openAuction(char* UID, char* password, char* name, char* asset_fname, char* start_value, char* timeactive, char* ASIP, char* ASPort) {
-    char openAuctionMessage[MAX_BUFFER_SIZE];
+    //char openAuctionMessage[MAX_BUFFER_SIZE];
 
     // Open the file containing the asset
     FILE* assetFile = fopen(asset_fname, "rb");
@@ -291,6 +296,8 @@ void openAuction(char* UID, char* password, char* name, char* asset_fname, char*
     long int fsize = ftell(assetFile);
     fseek(assetFile, 0, SEEK_SET);
     fclose(assetFile);
+
+    char openAuctionMessage[MAX_BUFFER_SIZE+fsize];
     
     char *fileData = readFile(asset_fname);
     if (fileData == NULL) {
@@ -302,7 +309,7 @@ void openAuction(char* UID, char* password, char* name, char* asset_fname, char*
 
     // Send open auction message
     char reply[MAX_BUFFER_SIZE];
-    TCPMessage(openAuctionMessage, reply, ASIP, ASPort);
+    TCPMessage(openAuctionMessage, reply, ASIP, ASPort, fsize);
 
     // Process reply and display results
     if (strncmp(reply, "ROA OK", 6) == 0) {
@@ -338,7 +345,7 @@ char *readFile(const char *filename) {
         return NULL;
     }
 
-    if (fread(buffer, 1, fileSize, file) != fileSize) { //TODO: Warning: warning: comparison of integer expressions of different signedness: ‘size_t’ {aka ‘long unsigned int’} and ‘long int’ [-Wsign-compare]
+    if (fread(buffer, 1, fileSize, file) != fileSize) {
         perror("Error reading file");
         free(buffer);
         fclose(file);
@@ -358,7 +365,7 @@ void closeAuction(char* UID, char* password, char* AID, char* ASIP, char* ASPort
 
     // Send close auction message
     char reply[MAX_BUFFER_SIZE];
-    TCPMessage(closeAuctionMessage, reply, ASIP, ASPort);
+    TCPMessage(closeAuctionMessage, reply, ASIP, ASPort, 0);
 
     // Process reply and display results
     if (strncmp(reply, "RCL OK", 6) == 0) {
@@ -469,7 +476,7 @@ void showAsset(char* AID, char* ASIP, char* ASPort) {
     snprintf(showAssetMessage, sizeof(showAssetMessage), "SAS %s", AID);
 
     char reply[MAX_BUFFER_SIZE];
-    TCPMessage(showAssetMessage, reply, ASIP, ASPort);
+    TCPMessage(showAssetMessage, reply, ASIP, ASPort, 0);
 
     // Process reply and display results
     if (strncmp(reply, "RSA OK", 6) == 0) {
@@ -495,7 +502,7 @@ void bid(char* UID, char* password, char* AID, char* value, char* ASIP, char* AS
     snprintf(bidMessage, sizeof(bidMessage), "BID %s %s %s %s\n", UID, password, AID, value);
 
     char reply[MAX_BUFFER_SIZE];
-    TCPMessage(bidMessage, reply, ASIP, ASPort);
+    TCPMessage(bidMessage, reply, ASIP, ASPort, 0);
 
     // Process reply and display results
     if (strncmp(reply, "RBD ACC", 7) == 0) {
@@ -580,7 +587,7 @@ int logout(char* UID, char* password, char* ASIP, char* ASPort, int isUserLogged
     return -1;
 }
 
-void unregister(char* UID, char* password, char* ASIP, char* ASPort, int isUserLoggedIn) { //TODO: isUserLoggedIn not used
+void unregister(char* UID, char* password, char* ASIP, char* ASPort, int isUserLoggedIn) {
     char message[MAX_BUFFER_SIZE];
     snprintf(message, sizeof(message), "UNR %s %s\n", UID, password);
 
