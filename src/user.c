@@ -9,17 +9,19 @@
 #include <string.h>
 #include <errno.h>
 
-// #include "communication.h"
+// #include "common.h"
 
 #define MAX_BUFFER_SIZE 4000
-#define MAX_FILENAME_SIZE 24
 #define MAX_PASSWORD_SIZE 9
+#define MAX_FILENAME_SIZE 24
+#define MAX_FSIZE_LEN 8
+#define MAX_FSIZE_NUM 0xA00000 // 10 MB
 
 int createUDPSocket() {
     int udpSocket = socket(AF_INET, SOCK_DGRAM, 0);
     if (udpSocket == -1) {
         perror("UDP socket creation failed");
-        exit(EXIT_FAILURE);
+        return-1;
     }
     return udpSocket;
 }
@@ -28,7 +30,7 @@ int createTCPSocket() {
     int tcpSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (tcpSocket == -1) {
         perror("TCP socket creation failed");
-        exit(EXIT_FAILURE);
+        return-1;
     }
     return tcpSocket;
 }
@@ -45,17 +47,18 @@ void listAuctions(char* ASIP, char* ASPort);
 void showAsset(char* AID, char* ASIP, char* ASPort);
 void bid(char* UID, char* password, char* AID, char* value, char* ASIP, char* ASPort);
 void showRecord(char* AID, char* ASIP, char* ASPort);
-int logout(char* UID, char* password, char* ASIP, char* ASPort, int isUserLoggedIn);
-void unregister(char* UID, char* password, char* ASIP, char* ASPort, int isUserLoggedIn);
-void exitApplication();
+int logout(char* UID, char* password, char* ASIP, char* ASPort);
+int unregister(char* UID, char* password, char* ASIP, char* ASPort);
 char *readFile(const char *filename);
 
 extern int errno;
 
 int main(int argc, char *argv[]) {
-    char ASIP[50] = "tejo.tecnico.ulisboa.pt"; //TODO WHAT SHOULD BE THE PRESET
+    char ASIP[50] = "localhost";
     char ASport[6] = "58022";
-    char input[50];
+    char UID[7];
+    char password[9];
+    int presentLoginCredentials = 0;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-n") == 0 && i + 1 < argc) {
@@ -69,13 +72,9 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    int isUserLoggedIn = 0;
-
     // Application loop
     while (1) {
         char token[50];
-        char UID[7];
-        char password[9];
 
         printf("Digite um comando: ");
         scanf("%s", token);
@@ -84,15 +83,14 @@ int main(int argc, char *argv[]) {
         if (strcmp(token, "login") == 0) {
             char UID_buffer[7];
             char password_buffer[9];
-            strcpy(UID_buffer,UID);
-            strcpy(password_buffer,password);
-            scanf("%s %s", UID, password);
-            int isUserLoggedInTest = login(UID, password, ASIP, ASport);
-            if(isUserLoggedInTest == 0){
-                strcpy(UID,UID_buffer);
-                strcpy(password,password_buffer);
+            scanf("%s %s", UID_buffer, password_buffer);
+            int loginResponse = login(UID_buffer, password_buffer, ASIP, ASport);
+            if(loginResponse == 0){//success
+                strcpy(UID, UID_buffer);
+                strcpy(password, password_buffer);
+                presentLoginCredentials = 1;
             } else {
-                isUserLoggedIn = 1;
+                presentLoginCredentials = 0;
             }
 
         } else if (strcmp(token, "open") == 0) {
@@ -133,15 +131,29 @@ int main(int argc, char *argv[]) {
             scanf("%s", AID);
             showRecord(AID, ASIP, ASport);
 
-        } else if (strcmp(token, "logout") == 0) {
-            isUserLoggedIn = logout(UID, password, ASIP, ASport, isUserLoggedIn);
-            //TODO limpar UID e password?
+        } else if (strcmp(token, "logout") == 0){
+            if(presentLoginCredentials == 0){
+                printf("Please Login First\n");
+            } else {
+                presentLoginCredentials = logout(UID, password, ASIP, ASport);
+                if(presentLoginCredentials == 0){
+                    memset(&UID, 0, sizeof(UID));
+                    memset(&password, 0, sizeof(password));
+                }
+            }
 
         } else if (strcmp(token, "unregister") == 0) {
-            unregister(UID, password, ASIP, ASport, isUserLoggedIn);
-
+            if(presentLoginCredentials == 0){
+                printf("Please Login First\n");
+            } else {
+                presentLoginCredentials = unregister(UID, password, ASIP, ASport);
+                if(presentLoginCredentials == 0){
+                    memset(&UID, 0, sizeof(UID));
+                    memset(&password, 0, sizeof(password));
+                }
+            }
         } else if (strcmp(token, "exit") == 0) {
-            if(isUserLoggedIn == 0){
+            if(presentLoginCredentials == 0){
                 break; // Exit the loop and end the program
             } else {
                 printf("User is logged in. Please log out.\n");
@@ -185,7 +197,7 @@ int UDPMessage(const char* message, char* reply, char* ASPort, char* ASIP) {
         }
         freeaddrinfo(res);
         close(fd);
-        return n; // Return the number of bytes read
+        return received; // Return the number of bytes read
     }
     return -1;
 }
@@ -290,16 +302,16 @@ int login(char* UID, char* password, char* ASIP, char* ASPort) {
     // Process reply and display results
     if(strcmp(reply, "RLI OK\n") == 0){
         printf("Login Result: Successful!\n");
-        return 1;
+        return 0;
     } else if (strcmp(reply, "RLI NOK\n") == 0){
         printf("Login Result: Unsuccessful :(\n");
-        return 0;
+        return 1;
     } else if(strcmp(reply, "RLI REG\n") == 0){
         printf("Login Result: User Registered!\n");
-        return 1;
+        return 0;
     } else {
         printf("Unexpected reply: %s\n", reply);
-        return 0;
+        return 1;
     }
 }
 
@@ -622,7 +634,7 @@ void showRecord(char* AID, char* ASIP, char* ASPort) {
     }
 }
 
-int logout(char* UID, char* password, char* ASIP, char* ASPort, int isUserLoggedIn) {
+int logout(char* UID, char* password, char* ASIP, char* ASPort) {
     char message[MAX_BUFFER_SIZE];
     snprintf(message, sizeof(message), "LOU %s %s\n", UID, password);
 
@@ -638,18 +650,16 @@ int logout(char* UID, char* password, char* ASIP, char* ASPort, int isUserLogged
         printf("Logout Result: Unsuccessful, user is not logged in\n");
         return 0;
     } else if(strcmp(reply, "RLO UNR\n") == 0){
-        printf("Logout Result: Unrecognized user\n");
-        return isUserLoggedIn;
+        printf("Logout Result: Unrecognized user\n");//TODO: please log in again & por return 0 e apagar credenciais do main?
+        return 1;
     }
 
     return -1;
 }
 
-void unregister(char* UID, char* password, char* ASIP, char* ASPort, int isUserLoggedIn) {
+int unregister(char* UID, char* password, char* ASIP, char* ASPort) {
     char message[MAX_BUFFER_SIZE];
     snprintf(message, sizeof(message), "UNR %s %s\n", UID, password);
-
-    printf("%s", message);
 
     //envia mensagem
     char reply[MAX_BUFFER_SIZE];
@@ -658,11 +668,13 @@ void unregister(char* UID, char* password, char* ASIP, char* ASPort, int isUserL
     // Process reply and display results
     if(strcmp(reply, "RUR OK\n") == 0){
         printf("Unregister Result: Successful!\n");
-        isUserLoggedIn = 0;
+        return 0;
     } else if (strcmp(reply, "RUR NOK\n") == 0){
         printf("Unregister Result: Unsuccessful, user is not logged in\n");
+        return 0;
     } else if(strcmp(reply, "RUR UNR\n") == 0){
-        printf("Unregister Result: Unrecognized user\n");
+        printf("Unregister Result: Unrecognized user\n");//TODO: please log in again & por return 0 e apagar credenciais do main?
+        return 1;
     }
 }
 

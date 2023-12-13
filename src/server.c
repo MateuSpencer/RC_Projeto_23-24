@@ -2,35 +2,38 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <signal.h>
 #include <stdbool.h>
 #include <time.h>
 #include <dirent.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
+#include <sys/stat.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
-#include <time.h>
-#include <sys/stat.h>
 
-// #include "communication.h"
+// #include "common.h"
 
 #define VALID_USER 0
 #define USER_NOT_EXIST 1
 #define INVALID_PASSWORD 2
+#define MISSING_PASSWORD 3
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 #define MAX_BUFFER_SIZE 4000
-#define MAX_FILENAME_SIZE 24
 #define MAX_PASSWORD_SIZE 9
+#define MAX_FILENAME_SIZE 24
+#define MAX_FSIZE_LEN 8
+#define MAX_FSIZE_NUM 0xA00000 // 10 MB
 
 int createUDPSocket() {
     int udpSocket = socket(AF_INET, SOCK_DGRAM, 0);
     if (udpSocket == -1) {
         perror("UDP socket creation failed");
-        exit(EXIT_FAILURE);
+        return-1;
     }
     return udpSocket;
 }
@@ -39,15 +42,18 @@ int createTCPSocket() {
     int tcpSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (tcpSocket == -1) {
         perror("TCP socket creation failed");
-        exit(EXIT_FAILURE);
+        return-1;
     }
     return tcpSocket;
 }
 
-void createDirectory(const char *path);
-void createFile(const char *directory, const char *filename);
-void writeFile(const char *filePath, const char *content);
-void removeFile(const char *filePath);
+int handleUDPRequests(char* ASport, int verbose);
+int handleTCPRequests(char* ASport, int verbose);
+
+int createDirectory(const char *path);
+int createFile(const char *directory, const char *filename);
+int writeFile(const char *filePath, const char *content);
+int removeFile(const char *filePath);
 void getCurrentDateTime(char* dateTime);
 
 int validateUser(const char* UID, const char* password);
@@ -78,6 +84,15 @@ int main(int argc, char *argv[]) {
     int opt;
     char ASport[6] = "58022";
     int verbose = 0; // Verbose mode flag
+    //TODO: COnfirm this stuff
+    struct sigaction act; //TODO: SIGPIPE signal will be ignored
+                          //TODO: if the connection is lost and you write to the socket, the write will return -1 and errno will be set to EPIPE
+    memset(&act,0,sizeof act);
+    act.sa_handler=SIG_IGN;
+    if(sigaction(SIGPIPE,&act,NULL)==-1)exit(EXIT_FAILURE);
+    if(sigaction(SIGCHLD,&act,NULL)==-1)exit(EXIT_FAILURE);
+
+
 
     // Parse command-line arguments
     while ((opt = getopt(argc, argv, "p:v")) != -1) {
@@ -96,7 +111,6 @@ int main(int argc, char *argv[]) {
             exit(EXIT_FAILURE);
         }
     }
-
     // Fork a new process
     pid_t pid = fork();
 
@@ -105,222 +119,14 @@ int main(int argc, char *argv[]) {
         perror("Failed to fork into UDP and TCP listeners");
         exit(EXIT_FAILURE);
     } else if (pid != 0) {
-        // Parent process will handle UDP requests
-
-        // Variable declarations
-        int errcode;
-        ssize_t n;
-        socklen_t addrlen;
-        struct addrinfo hints, *res;
-        struct sockaddr_in addr;
-        char udpBuffer[128];//should this be as big as MAX_BUFFER_SIZE?
-        char response[MAX_BUFFER_SIZE];
-
-        // Create a UDP socket
-        int udpSocket = createUDPSocket();
-
-        // Set up hints for getaddrinfo
-        memset(&hints, 0, sizeof hints);
-        hints.ai_family = AF_INET;
-        hints.ai_socktype = SOCK_DGRAM;
-        hints.ai_flags = AI_PASSIVE;
-
-        // Get address info
-        errcode = getaddrinfo(NULL, ASport, &hints, &res);
-        if (errcode != 0) {
-            // If getaddrinfo fails, print error and exit
-            perror("getaddrinfo failed");
-            exit(EXIT_FAILURE);
+        // Parent process
+        if(handleUDPRequests(ASport, verbose) == -1) {
+            //TODO: Terminate Server by closing what is necessary
         }
-
-        // Bind the socket to the specified address
-        n = bind(udpSocket, res->ai_addr, res->ai_addrlen);
-        if (n == -1) {
-            // If bind fails, print error and exit
-            perror("Bind failed");
-            exit(EXIT_FAILURE);
-        }
-
-        // Free the address info struct
-        freeaddrinfo(res);
-
-        // Set up the address length
-        addrlen = sizeof(addr);
-
-        // If verbose mode is on, print the listening port
-        if (verbose) {
-            printf("[UDP] Listening on port %s\n", ASport);
-        }
-
-        // Main loop to handle incoming requests
-        while (1) {
-            // Receive data from the client
-            n = recvfrom(udpSocket, udpBuffer, sizeof(udpBuffer), 0, (struct sockaddr *)&addr, &addrlen);
-            if (n <= 0) {
-                // If recvfrom fails, print error and continue to the next iteration
-                perror("Error receiving UDP message");
-                continue;
-            }
-            // Null-terminate the received data
-            udpBuffer[n] = '\0';
-
-            // Process the received data
-            if (udpBuffer[n - 1] != '\n') {
-                // If the last character is not a newline, send an error response
-                sprintf(response, "ERR\n"); 
-            } else {
-                // Otherwise, parse the action and data from the received message
-                char* action = strtok(udpBuffer, " ");
-                char* data = strtok(NULL, "\n");
-
-                // Handle the action
-                if (strcmp(action, "LIN") == 0) {
-                    handleLoginRequest(data, response, verbose);
-                } else if (strcmp(action, "LMA") == 0) {
-                    handleMyAuctionsRequest(data, response, verbose);
-                } else if (strcmp(action, "LMB") == 0) {
-                    handleMyBidsRequest(data, response, verbose);
-                } else if (strcmp(action, "LST") == 0) {
-                    handleListAuctionsRequest(response, verbose);
-                } else if (strcmp(action, "SRC") == 0) {
-                    handleShowRecordRequest(data, response, verbose);
-                } else if (strcmp(action, "LOU") == 0) {
-                    handleLogoutRequest(data, response, verbose);
-                } else if (strcmp(action, "UNR") == 0) {
-                    handleUnregisterRequest(data, response, verbose);
-                } else {
-                    // If the action is unknown, send an error response
-                    sprintf(response, "ERR\n"); 
-                }
-            }
-            // Send the response to the client
-            n = sendto(udpSocket, response, sizeof(response), 0, (struct sockaddr *)&addr, addrlen);
-            if (n == -1) {
-                // If sendto fails, print error and continue to the next iteration
-                perror("Error sending UDP message");
-                continue;
-            }
-        }
-        // Close the socket
-        close(udpSocket);
     } else {
-        // Child process (TCP listener)
-
-        // Variable declarations
-        int errcode;
-        socklen_t addrlen;
-        struct addrinfo hints, *res;
-        struct sockaddr_in addr;
-        char buffer[128];
-        char response[MAX_BUFFER_SIZE];
-
-        // Create a TCP socket
-        int tcpSocket = createTCPSocket();
-
-        // Set up hints for getaddrinfo
-        memset(&hints, 0, sizeof hints);
-        hints.ai_family = AF_INET;
-        hints.ai_socktype = SOCK_STREAM;
-        hints.ai_flags = AI_PASSIVE;
-
-        // Get address info
-        errcode = getaddrinfo(NULL, ASport, &hints, &res);
-        if (errcode != 0) {
-            // If getaddrinfo fails, print error and exit
-            perror("Error in getaddrinfo");
-            exit(EXIT_FAILURE);
-        }
-
-        // Bind the socket to the specified address
-        if (bind(tcpSocket, res->ai_addr, res->ai_addrlen) == -1) {
-            // If bind fails, print error and exit
-            perror("Error binding TCP socket");
-            exit(EXIT_FAILURE);
-        }
-
-        // Listen for incoming connections
-        if (listen(tcpSocket, 5) == -1) { //TODO: only 5 waiting requests?
-            // If listen fails, print error and exit
-            perror("Error listening on TCP socket");
-            exit(EXIT_FAILURE);
-        }
-
-        // Set up the address length
-        addrlen = sizeof(addr);
-
-        // Main loop to handle incoming connections
-        while (1) {
-            // Accept a new connection
-            int sessionFd  = accept(tcpSocket, (struct sockaddr *)&addr, &addrlen);
-
-            if (sessionFd == -1) {
-                // If accept fails, print error and continue to the next iteration
-                perror("Error accepting TCP connection");
-                continue;
-            }
-
-            // Fork a new process to handle the connection
-            pid_t tcpPid = fork();
-
-            if (tcpPid == -1) {
-                // If fork fails, print error, close the connection, and continue to the next iteration
-                perror("Failed to fork TCP Session");
-                close(sessionFd);
-                continue;
-            } else if (tcpPid != 0) {
-                // Parent process
-                // Close the connection and continue to the next iteration
-                close(sessionFd);
-                continue;
-            } else {
-                // Child process
-                // Close the listening socket
-                close(tcpSocket);
-                // Read data from the client
-                size_t alreadyRead = 0;
-                ssize_t n;
-                while (alreadyRead < MAX_BUFFER_SIZE && (n = read(sessionFd, buffer + alreadyRead, sizeof(char))) > 0) {
-                    alreadyRead += (size_t)n;
-                    if (buffer[alreadyRead - 1] == '\n') {
-                        break;
-                    }
-                }
-
-                // Parse the action from the received data
-                char* action = strtok(buffer, " ");
-
-                // Handle the action
-                if (strcmp(action, "LIN") == 0) {
-                    handleLoginRequest(buffer, response, verbose);
-                } else if (strcmp(action, "OPA") == 0) {
-                    handleOpenAuctionRequest(buffer, response, verbose);
-                } else if (strcmp(action, "CLS") == 0) {
-                    handleCloseAuctionRequest(buffer, response, verbose);
-                } else if (strcmp(action, "SAS") == 0) {
-                    handleShowAssetRequest(buffer, response, verbose);
-                } else if (strcmp(action, "BID") == 0) {
-                    handleBidRequest(buffer, response, verbose);
-                } else {
-                    // If the action is unknown, send an error response
-                    sprintf(response, "ERR\n"); 
-                }
-
-                // Send the response to the client
-                size_t toWrite = strlen(response);
-                size_t written = 0;
-                while (written < toWrite) {
-                    ssize_t sent = write(sessionFd, response + written, MIN(MAX_BUFFER_SIZE, toWrite - written));
-                    if (sent <= 0) {
-                        // If write fails, print error and break the loop
-                        perror("Failed to write to to TCP Socket");
-                        break;
-                    }
-                    written += (size_t)sent;
-                }
-                // Close the connection and exit
-                close(sessionFd);
-                exit(EXIT_SUCCESS);
-            }
+        // Child process
+        if(handleTCPRequests(ASport, verbose) == -1){
+            //TODO: Terminate Server by closing what is necessary
         }
     }
 
@@ -338,20 +144,250 @@ int main(int argc, char *argv[]) {
     return EXIT_SUCCESS;
 }
 
+int handleUDPRequests(char* ASport, int verbose) {
+    // Variable declarations
+    int errcode;
+    socklen_t addrlen;
+    struct addrinfo hints, *res;
+    struct sockaddr_in addr;
+    char udpBuffer[MAX_BUFFER_SIZE];//should this be as big as MAX_BUFFER_SIZE?
+    char response[MAX_BUFFER_SIZE];
+
+    // Create a UDP socket
+    int udpSocket = createUDPSocket();
+    if (udpSocket == -1) {
+        return -1;
+    }
+
+    // Set up hints for getaddrinfo
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_DGRAM;
+    hints.ai_flags = AI_PASSIVE;
+
+    // Get address info
+    errcode = getaddrinfo(NULL, ASport, &hints, &res);
+    if (errcode != 0) {
+        // If getaddrinfo fails, print error and exit
+        perror("getaddrinfo failed");
+        return -1;
+    }
+
+    // Bind the socket to the specified address
+    ssize_t n = bind(udpSocket, res->ai_addr, res->ai_addrlen);
+    if (n == -1) {
+        // If bind fails, print error and exit
+        perror("Bind failed");
+        freeaddrinfo(res);
+        return -1;
+    }
+
+    // Free the address info struct
+    freeaddrinfo(res);
+
+    // Set up the address length
+    addrlen = sizeof(addr);
+
+    // If verbose mode is on, print the listening port
+    if (verbose) {
+        printf("[UDP] Listening on port %s\n", ASport);
+    }
+
+    // Main loop to handle incoming requests
+    while (1) { //TODO: How to break loop
+        // Receive data from the client
+        n = recvfrom(udpSocket, udpBuffer, sizeof(udpBuffer), 0, (struct sockaddr *)&addr, &addrlen);
+        if (n <= 0) {
+            // If recvfrom fails, print error and continue to the next iteration
+            perror("Error receiving UDP message");
+            continue;
+        }
+        // Null-terminate the received data
+        udpBuffer[n] = '\0';
+
+        // Process the received data
+        if (udpBuffer[n - 1] != '\n') {
+            // If the last character is not a newline, send an error response
+            sprintf(response, "ERR\n"); 
+        } else {
+            // Otherwise, parse the action and data from the received message
+            char* action = strtok(udpBuffer, " ");
+            char* data = strtok(NULL, "\n");
+
+            // Handle the action
+            if (strcmp(action, "LIN") == 0) {
+                handleLoginRequest(data, response, verbose);
+            } else if (strcmp(action, "LMA") == 0) {
+                handleMyAuctionsRequest(data, response, verbose);
+            } else if (strcmp(action, "LMB") == 0) {
+                handleMyBidsRequest(data, response, verbose);
+            } else if (strcmp(action, "LST") == 0) {
+                handleListAuctionsRequest(response, verbose);
+            } else if (strcmp(action, "SRC") == 0) {
+                handleShowRecordRequest(data, response, verbose);
+            } else if (strcmp(action, "LOU") == 0) {
+                handleLogoutRequest(data, response, verbose);
+            } else if (strcmp(action, "UNR") == 0) {
+                handleUnregisterRequest(data, response, verbose);
+            } else {
+                // If the action is unknown, send an error response
+                sprintf(response, "ERR\n"); 
+            }
+        }
+        // Send the response to the client
+        n = sendto(udpSocket, response, sizeof(response), 0, (struct sockaddr *)&addr, addrlen);
+        if (n == -1) {
+            // If sendto fails, print error and continue to the next iteration
+            perror("Error sending UDP message");
+            continue;
+        }
+    }
+    // Close the socket
+    close(udpSocket);
+    return 0;
+}
+
+int handleTCPRequests(char* ASport, int verbose){
+    // Variable declarations
+    int errcode;
+    socklen_t addrlen;
+    struct addrinfo hints, *res;
+    struct sockaddr_in addr;
+    char *buffer[MAX_BUFFER_SIZE];
+    char response[MAX_BUFFER_SIZE];
+
+    // Create a TCP socket
+    int tcpSocket = createTCPSocket();
+    if (tcpSocket == -1) {
+        return -1;
+    }
+
+    // Set up hints for getaddrinfo
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = AI_PASSIVE;
+
+    // Get address info
+    errcode = getaddrinfo(NULL, ASport, &hints, &res);
+    if (errcode != 0) {
+        // If getaddrinfo fails, print error and exit
+        perror("Error in getaddrinfo");
+        return -1;
+    }
+
+    // Bind the socket to the specified address
+    if (bind(tcpSocket, res->ai_addr, res->ai_addrlen) == -1) {
+        // If bind fails, print error and exit
+        perror("Error binding TCP socket");
+        freeaddrinfo(res);
+        return -1;
+    }
+    // Free the address info struct
+    freeaddrinfo(res);
+
+    // Listen for incoming connections
+    if (listen(tcpSocket, 5) == -1) { //TODO: only 5 waiting requests?
+        // If listen fails, print error and exit
+        perror("Error listening on TCP socket");
+        return -1;
+    }
+
+    // Set up the address length
+    addrlen = sizeof(addr);
+
+    // Main loop to handle incoming connections
+    while (1) {
+        // Accept a new connection
+        int sessionFd  = accept(tcpSocket, (struct sockaddr *)&addr, &addrlen);
+
+        if (sessionFd == -1) {
+            // If accept fails, print error and continue to the next iteration
+            perror("Error accepting TCP connection");
+            continue;
+        }
+
+        // Fork a new process to handle the connection
+        pid_t tcpPid = fork();
+
+        if (tcpPid == -1) {
+            // If fork fails, print error, close the connection, and continue to the next iteration
+            perror("Failed to fork TCP Session");
+            close(sessionFd);
+            continue;
+        } else if (tcpPid != 0) {
+            // Parent process
+            // Close the connection and continue to the next iteration
+            close(sessionFd);
+            continue;
+        } else {
+            // Child process
+            // Close the listening socket
+            close(tcpSocket);
+            // Read data from the client
+            size_t alreadyRead = 0;
+            ssize_t n;
+            while (alreadyRead < MAX_BUFFER_SIZE && (n = read(sessionFd, buffer + alreadyRead, sizeof(char))) > 0) {
+                alreadyRead += (size_t)n;
+                if (buffer[alreadyRead - 1] == '\n') {
+                    break;
+                }
+            }
+
+            // Parse the action from the received data
+            char* action = strtok(buffer, " ");
+
+            // Handle the action
+            if (strcmp(action, "LIN") == 0) {
+                handleLoginRequest(buffer, response, verbose);
+            } else if (strcmp(action, "OPA") == 0) {
+                handleOpenAuctionRequest(buffer, response, verbose);
+            } else if (strcmp(action, "CLS") == 0) {
+                handleCloseAuctionRequest(buffer, response, verbose);
+            } else if (strcmp(action, "SAS") == 0) {
+                handleShowAssetRequest(buffer, response, verbose);
+            } else if (strcmp(action, "BID") == 0) {
+                handleBidRequest(buffer, response, verbose);
+            } else {
+                // If the action is unknown, send an error response
+                sprintf(response, "ERR\n"); 
+            }
+
+            // Send the response to the client
+            size_t toWrite = strlen(response);
+            size_t written = 0;
+            while (written < toWrite) {
+                ssize_t sent = write(sessionFd, response + written, MIN(MAX_BUFFER_SIZE, toWrite - written));
+                if (sent <= 0) {
+                    // If write fails, print error and break the loop
+                    perror("Failed to write to to TCP Socket");
+                    break;
+                }
+                written += (size_t)sent;
+            }
+            // Close the connection and exit
+            close(sessionFd);
+            exit(EXIT_SUCCESS);
+        }
+    }
+    close(tcpSocket);
+    return 0;
+}
 
 /* --------------------- SUPPORT FUNCTIONS -----------------------------------*/
 
-void createDirectory(const char *path) {
+int createDirectory(const char *path) {
     struct stat st = {0};
     if (stat(path, &st) == -1) {
         if (mkdir(path, 0700) == -1) {
             perror("Error creating directory");
-            exit(EXIT_FAILURE);
+            return -1;
         }
     }
+    return 0;
 }
 
-void createFile(const char *directory, const char *filename) {
+int createFile(const char *directory, const char *filename) {
     char filePath[100];
     snprintf(filePath, sizeof(filePath), "%s/%s", directory, filename);
     
@@ -361,11 +397,12 @@ void createFile(const char *directory, const char *filename) {
         fclose(file);
     } else {
         perror("Error creating file");
-        exit(EXIT_FAILURE);
+        return -1;
     }
+    return 0;
 }
 
-void writeFile(const char *filePath, const char *content) {
+int writeFile(const char *filePath, const char *content) {
     FILE *file = fopen(filePath, "w");
     
     if (file != NULL) {
@@ -373,15 +410,17 @@ void writeFile(const char *filePath, const char *content) {
         fclose(file);
     } else {
         perror("Error writing to file");
-        exit(EXIT_FAILURE);
+        return -1;
     }
+    return 0;
 }
 
-void removeFile(const char *filePath) {
+int removeFile(const char *filePath) {
     if (remove(filePath) != 0) {
         perror("Error removing file");
-        exit(EXIT_FAILURE);
+        return -1;
     }
+    return 0;
 }
 
 // Function to get the current date and time in the required format
@@ -400,17 +439,16 @@ int validateUser(const char* UID, const char* password) {
     char userDir[50];
     snprintf(userDir, sizeof(userDir), "AS/USERS/%s", UID);
     char filename[50];
-    snprintf(filename, sizeof(filename), "%s_login.txt", UID);
+    snprintf(filename, sizeof(filename), "%s_pass.txt", UID);
 
     // Check if the user directory exists
     struct stat st;
     if (stat(userDir, &st) == 0) {
         char filePath[100];
         snprintf(filePath, sizeof(filePath), "%s/%s", userDir, filename);
-        // Check if the login file exists
+        // Check if the pass file exists
         if (access(filePath, F_OK) != -1) {
             // Check if the provided password matches the stored password
-            snprintf(filename, sizeof(filename), "%s_pass.txt", UID);
             snprintf(filePath, sizeof(filePath), "%s/%s", userDir, filename);
             FILE* file = fopen(filePath, "r");
             if (file != NULL) {
@@ -421,8 +459,8 @@ int validateUser(const char* UID, const char* password) {
                 return (strcmp(storedPassword, password) == 0) ? VALID_USER : INVALID_PASSWORD;
             }
         } else {
-            // User exists, but login file is missing
-            return INVALID_PASSWORD;
+            // User exists, but pass file is missing
+            return MISSING_PASSWORD;
         }
     } else {
         // User does not exist
@@ -575,6 +613,7 @@ int fileExists(const char* filePath) {
 void handleLoginRequest(char* request, char* response, int verbose) {
     char userDir[50];
     char filename[50];
+    char filePath[100];
 
     if (verbose) {
         printf("Request received: %s\n", request);
@@ -586,9 +625,22 @@ void handleLoginRequest(char* request, char* response, int verbose) {
     // Validate user existence and password
     int validation = validateUser(UID, password);
 
-    if (validation == VALID_USER) {
+    if (validation == VALID_USER || validation == MISSING_PASSWORD) {
         // User is already registered and password is correct, log in
+        // Construct user directory path
+        snprintf(userDir, sizeof(userDir), "AS/USERS/%s", UID);
+        // Create login file
+        snprintf(filename, sizeof(filename), "%s_login.txt", UID);
+        createFile(userDir, filename);
+        if(validation == MISSING_PASSWORD){//if user was registered but had no password, assign new password
+            snprintf(filename, sizeof(filename), "%s_pass.txt", UID);
+            createFile(userDir, filename);
+            snprintf(filePath, sizeof(filePath), "%s/%s", userDir, filename);
+            writeFile(filePath, password);
+        }
+
         snprintf(response, MAX_BUFFER_SIZE, "RLI OK\n");
+
         return;
     } else if (validation == USER_NOT_EXIST) {
         // User is not registered, register and log in the user
@@ -609,7 +661,6 @@ void handleLoginRequest(char* request, char* response, int verbose) {
 
         // Store the password in the password file
         snprintf(filename, sizeof(filename), "%s_pass.txt", UID);
-        char filePath[100];
         snprintf(filePath, sizeof(filePath), "%s/%s", userDir, filename);
         writeFile(filePath, password);
 
@@ -619,7 +670,7 @@ void handleLoginRequest(char* request, char* response, int verbose) {
 
         snprintf(response, MAX_BUFFER_SIZE, "RLI REG\n");
         return;
-    } else {
+    } else { // INVALID_PASSWORD
         // User exists but the password is invalid
         snprintf(response, MAX_BUFFER_SIZE, "RLI NOK\n");
         return;
@@ -1098,10 +1149,10 @@ void handleLogoutRequest(char* request, char* response, int verbose) {
     int validation = validateUser(UID, password);
     if (validation == VALID_USER) {
         // User is logged out
-        char filename[50];
-        snprintf(filename, sizeof(filename), "%s_login.txt", UID);
         char userDir[50];
         snprintf(userDir, sizeof(userDir), "AS/USERS/%s", UID);
+        char filename[50];
+        snprintf(filename, sizeof(filename), "%s_login.txt", UID);
         char filePath[100];
         snprintf(filePath, sizeof(filePath), "%s/%s", userDir, filename);
 
@@ -1129,14 +1180,18 @@ void handleUnregisterRequest(char* request, char* response, int verbose) {
     if (validation == VALID_USER) {
         // User exists and password is correct, unregister the user
         // Delete password file
-        char passFile[50];
-        snprintf(passFile, sizeof(passFile), "AS/USERS/%s_pass.txt", UID);
-        removeFile(passFile);
+        char userDir[50];
+        snprintf(userDir, sizeof(userDir), "AS/USERS/%s", UID);
+        char filename[50];
+        snprintf(filename, sizeof(filename), "%s_pass.txt", UID);
+        char filePath[100];
+        snprintf(filePath, sizeof(filePath), "%s/%s", userDir, filename);
+        removeFile(filePath);
 
         // Delete login file
-        char loginFile[50];
-        snprintf(loginFile, sizeof(loginFile), "AS/USERS/%s_login.txt", UID);
-        removeFile(loginFile);
+        snprintf(filename, sizeof(filename), "%s_login.txt", UID);
+        snprintf(filePath, sizeof(filePath), "%s/%s", userDir, filename);
+        removeFile(filePath);
 
         strcpy(response, "RUR OK\n");
     } else if (validation == USER_NOT_EXIST) {

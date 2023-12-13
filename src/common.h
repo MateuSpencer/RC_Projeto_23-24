@@ -1,5 +1,5 @@
-#ifndef COMMUNICATION_H
-#define COMMUNICATION_H
+#ifndef COMMON_H
+#define COMMON_H
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,11 +12,13 @@
 #include <netdb.h>
 
 #define MAX_BUFFER_SIZE 4000
-#define MAX_FILENAME_SIZE 24
 #define MAX_PASSWORD_SIZE 9
+#define MAX_FILENAME_SIZE 24
+#define MAX_FSIZE_LEN 8
+#define MAX_FSIZE_NUM 0xA00000 // 10 MB
 
 // Communication Functions
 int createUDPSocket();
 int createTCPSocket();
 
-#endif // COMMUNICATION_H
+#endif // COMMON_H
