@@ -86,6 +86,7 @@ volatile sig_atomic_t terminationRequested = 0;
 // Signal handler for SIGINT
 void sigintHandler(int signum) {
     terminationRequested = 1;
+    printf("\nReceived SIGINT, terminating server...\n");
 }
 
 int main(int argc, char *argv[]) {
@@ -125,6 +126,8 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    printf("To Terminate: CTRL+C\n");
+    
     // Fork a new process
     pid_t pid = fork();
 
@@ -134,14 +137,13 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     } else if (pid != 0) {
         // Parent process
-        if(handleTCPRequests(ASport, verbose) == -1) {
-            //TODO: Terminate Server by closing what is necessary
-        }
+        handleUDPRequests(ASport, verbose);
     } else {
         // Child process
-        if(handleUDPRequests(ASport, verbose) == -1){
-            //TODO: Terminate Server by closing what is necessary
+        if(handleTCPRequests(ASport, verbose) == -1){
+            exit(EXIT_FAILURE);
         }
+        exit(EXIT_SUCCESS);
     }
 
     // Wait for the child process to finish
@@ -201,7 +203,27 @@ int handleUDPRequests(char* ASport, int verbose) {
     }
 
     // Main loop to handle incoming requests
-    while (!terminationRequested) { 
+    while (!terminationRequested) {
+        fd_set readSet;
+        struct timeval timeout;
+        FD_ZERO(&readSet);
+        FD_SET(udpSocket, &readSet);
+
+        // Set a timeout for select to periodically check for termination
+        timeout.tv_sec = 1; 
+        timeout.tv_usec = 0;
+
+        // Use select to periodically check for termination
+        int result = select(udpSocket + 1, &readSet, NULL, NULL, &timeout);
+
+        if (result == -1) {
+            // Handle select error if necessary
+            perror("select");
+            break;
+        } else if (result == 0) {
+            // Timeout occurred, continue the loop
+            continue;
+        }
         // Receive data from the client
         n = recvfrom(udpSocket, udpBuffer, sizeof(udpBuffer), 0, (struct sockaddr *)&addr, &addrlen);
         if (n <= 0) {
@@ -211,9 +233,11 @@ int handleUDPRequests(char* ASport, int verbose) {
         }
         // Null-terminate the received data
         udpBuffer[n] = '\0';
-
+        if(verbose == 1){
+                printf("[TCP] Received: %s\n", udpBuffer);
+            }
         // Process the received data
-        if (udpBuffer[n - 1] != '\n') {
+        if (udpBuffer[n - 1] != '\n') {//TODO: por igual no TCP
             // If the last character is not a newline, send an error response
             sprintf(response, "ERR\n"); 
         } else {
@@ -310,8 +334,32 @@ int handleTCPRequests(char* ASport, int verbose){
     // Set up the address length
     addrlen = sizeof(addr);
 
+    if (verbose) {
+        printf("[TCP] Listening on port %s\n", ASport);
+    }
+
     // Main loop to handle incoming connections
     while (!terminationRequested) {
+        fd_set readSet;
+        struct timeval timeout;
+        FD_ZERO(&readSet);
+        FD_SET(tcpSocket, &readSet);
+
+        // Set a timeout for select to periodically check for termination
+        timeout.tv_sec = 1; // Adjust this value based on your requirements
+        timeout.tv_usec = 0;
+
+        // Use select to periodically check for termination
+        int result = select(tcpSocket + 1, &readSet, NULL, NULL, &timeout);
+
+        if (result == -1) {
+            // Handle select error if necessary
+            perror("select");
+            break;
+        } else if (result == 0) {
+            // Timeout occurred, continue the loop
+            continue;
+        }
         // Accept a new connection
         int sessionFd  = accept(tcpSocket, (struct sockaddr *)&addr, &addrlen);
 
@@ -342,7 +390,9 @@ int handleTCPRequests(char* ASport, int verbose){
                     break;
                 }
             }
-
+            if(verbose == 1){
+                printf("[TCP] Received: %s\n", buffer);
+            }
             // Parse the action from the received data
             char* action = strtok(buffer, " ");
             char* data = strtok(NULL, "\n");

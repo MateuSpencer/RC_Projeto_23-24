@@ -17,8 +17,9 @@
 #define MAX_FSIZE_LEN 8
 #define MAX_FSIZE_NUM 0xA00000 // 10 MB
 
+/*
 // Communication Functions
 int createUDPSocket();
 int createTCPSocket();
-
+*/
 #endif // COMMON_H

@@ -687,5 +687,6 @@ int unregister(char* UID, char* password, char* ASIP, char* ASPort) {
         printf("Unregister Result: Unrecognized user\n");//TODO: please log in again & por return 0 e apagar credenciais do main?
         return 1;
     }
+    return -1;
 }
 
