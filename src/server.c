@@ -48,24 +48,6 @@ int createTCPSocket() {
     return tcpSocket;
 }
 
-// Global variables to store the child process IDs
-pid_t udpChildPid, tcpChildPid;
-
-// Signal handler function
-void signalHandler(int signum) {
-    // Send SIGTERM to the child processes
-    kill(udpChildPid, SIGTERM);
-    kill(tcpChildPid, SIGTERM);
-
-    // Wait for the child processes to finish
-    int status;
-    waitpid(udpChildPid, &status, 0);
-    waitpid(tcpChildPid, &status, 0);
-
-    // Print a message and exit
-    printf("Terminating the program.\n");
-    exit(EXIT_SUCCESS);
-}
 
 int handleUDPRequests(char* ASport, int verbose);
 int handleTCPRequests(char* ASport, int verbose);
@@ -99,11 +81,24 @@ void handleShowRecordRequest(char* request, char* response, int verbose);
 void handleLogoutRequest(char* request, char* response, int verbose);
 void handleUnregisterRequest(char* request, char* response, int verbose);
 
+volatile sig_atomic_t terminationRequested = 0;
+
+// Signal handler for SIGINT
+void sigintHandler(int signum) {
+    terminationRequested = 1;
+}
 
 int main(int argc, char *argv[]) {
     int opt;
     char ASport[6] = "58022";
     int verbose = 0; // Verbose mode flag
+
+    // Set up the SIGINT signal handler
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = sigintHandler;
+    sigaction(SIGINT, &sa, NULL);
+
     //TODO: Confirm this stuff
     struct sigaction act; //TODO: SIGPIPE signal will be ignored
                           //TODO: if the connection is lost and you write to the socket, the write will return -1 and errno will be set to EPIPE
@@ -111,8 +106,6 @@ int main(int argc, char *argv[]) {
     act.sa_handler=SIG_IGN;
     if(sigaction(SIGPIPE,&act,NULL)==-1)exit(EXIT_FAILURE);
     if(sigaction(SIGCHLD,&act,NULL)==-1)exit(EXIT_FAILURE);
-
-
 
     // Parse command-line arguments
     while ((opt = getopt(argc, argv, "p:v")) != -1) {
@@ -131,6 +124,7 @@ int main(int argc, char *argv[]) {
             exit(EXIT_FAILURE);
         }
     }
+
     // Fork a new process
     pid_t pid = fork();
 
@@ -152,14 +146,7 @@ int main(int argc, char *argv[]) {
 
     // Wait for the child process to finish
     int status;
-    waitpid(-1, &status, 0);
-
-    // Check the exit status of the child process
-    if (WIFEXITED(status)) {
-        printf("Child process exited with status %d\n", WEXITSTATUS(status));
-    } else {
-        printf("Child process terminated abnormally\n");
-    }
+    waitpid(pid, &status, 0);
 
     return EXIT_SUCCESS;
 }
@@ -214,7 +201,7 @@ int handleUDPRequests(char* ASport, int verbose) {
     }
 
     // Main loop to handle incoming requests
-    while (1) { //TODO: How to break loop
+    while (!terminationRequested) { 
         // Receive data from the client
         n = recvfrom(udpSocket, udpBuffer, sizeof(udpBuffer), 0, (struct sockaddr *)&addr, &addrlen);
         if (n <= 0) {
@@ -324,7 +311,7 @@ int handleTCPRequests(char* ASport, int verbose){
     addrlen = sizeof(addr);
 
     // Main loop to handle incoming connections
-    while (1) {
+    while (!terminationRequested) {
         // Accept a new connection
         int sessionFd  = accept(tcpSocket, (struct sockaddr *)&addr, &addrlen);
 
