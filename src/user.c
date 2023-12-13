@@ -156,7 +156,7 @@ int main(int argc, char *argv[]) {
             if(presentLoginCredentials == 0){
                 break; // Exit the loop and end the program
             } else {
-                printf("User is logged in. Please log out.\n");
+                printf("User is logged in. Please log out first.\n");
             }
 
         } else {
@@ -203,13 +203,24 @@ int UDPMessage(const char* message, char* reply, char* ASPort, char* ASIP) {
 }
 
 int TCPMessage(const char* message, char* reply, char* ASPort, char* ASIP, int size) {
-    int fd, errcode;
+    int tcpSocket, errcode;
     ssize_t n;
     socklen_t addrlen;
     struct addrinfo hints, *res;
     struct sockaddr_in addr;
 
-    fd = createTCPSocket();
+    tcpSocket = createTCPSocket();
+
+    if (tcpSocket == -1) {
+        return -1;
+    }
+    
+    // Set the SO_REUSEADDR option
+    int yes = 1;
+    if (setsockopt(tcpSocket, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1) {
+        perror("setsockopt");
+        exit(EXIT_FAILURE);
+    }
 
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_INET;
@@ -218,26 +229,26 @@ int TCPMessage(const char* message, char* reply, char* ASPort, char* ASIP, int s
     errcode = getaddrinfo(ASIP, ASPort, &hints, &res);
     if (errcode != 0) {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(errcode));
-        close(fd);
+        close(tcpSocket);
         return -1;
     }
 
-    n = connect(fd, res->ai_addr, res->ai_addrlen);
+    n = connect(tcpSocket, res->ai_addr, res->ai_addrlen);
     if (n == -1) {
         perror("connect");
         freeaddrinfo(res);
-        close(fd);
+        close(tcpSocket);
         return -1;
     }
 
     size_t toWrite = strlen(message)+size;
     size_t written = 0;
     while (written < toWrite) {
-        ssize_t n = write(fd, message + written, toWrite - written);
+        ssize_t n = write(tcpSocket, message + written, toWrite - written);
         if (n <= 0) {
             perror("write");
             freeaddrinfo(res);
-            close(fd);
+            close(tcpSocket);
             return -1;
         }
         written += (size_t)n;
@@ -246,11 +257,11 @@ int TCPMessage(const char* message, char* reply, char* ASPort, char* ASIP, int s
     size_t alreadyRead = 0;
     while (1) {
         errno = 0;
-        ssize_t n = read(fd, reply + alreadyRead, 1 * sizeof(char));
+        ssize_t n = read(tcpSocket, reply + alreadyRead, 1 * sizeof(char));
         if (n <= 0) {
             perror("read");
             freeaddrinfo(res);
-            close(fd);
+            close(tcpSocket);
             return -1;
         }
         alreadyRead += (size_t)n;
@@ -260,7 +271,7 @@ int TCPMessage(const char* message, char* reply, char* ASPort, char* ASIP, int s
         } else if (alreadyRead >= MAX_BUFFER_SIZE + 1) {
             perror("read");
             freeaddrinfo(res);
-            close(fd);
+            close(tcpSocket);
             return -1;
         }
     }
@@ -282,7 +293,7 @@ int TCPMessage(const char* message, char* reply, char* ASPort, char* ASIP, int s
     }*/
 
     freeaddrinfo(res);
-    close(fd);
+    close(tcpSocket);
     return (ssize_t)alreadyRead; // Return the number of bytes read
 }
 

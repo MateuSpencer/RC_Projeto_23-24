@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -Wall -Wextra
-SOURCES_SERVER = src/server.c src/communication.c
-SOURCES_USER = src/user.c src/communication.c
+SOURCES_SERVER = src/server.c src/common.c
+SOURCES_USER = src/user.c src/common.c
 OBJECTS_SERVER = $(SOURCES_SERVER:src/%.c=%.o)
 OBJECTS_USER = $(SOURCES_USER:src/%.c=%.o)
 EXECUTABLE_SERVER = server

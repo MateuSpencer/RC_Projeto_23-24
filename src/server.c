@@ -13,6 +13,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <signal.h>
 
 // #include "common.h"
 
@@ -45,6 +46,25 @@ int createTCPSocket() {
         return-1;
     }
     return tcpSocket;
+}
+
+// Global variables to store the child process IDs
+pid_t udpChildPid, tcpChildPid;
+
+// Signal handler function
+void signalHandler(int signum) {
+    // Send SIGTERM to the child processes
+    kill(udpChildPid, SIGTERM);
+    kill(tcpChildPid, SIGTERM);
+
+    // Wait for the child processes to finish
+    int status;
+    waitpid(udpChildPid, &status, 0);
+    waitpid(tcpChildPid, &status, 0);
+
+    // Print a message and exit
+    printf("Terminating the program.\n");
+    exit(EXIT_SUCCESS);
 }
 
 int handleUDPRequests(char* ASport, int verbose);
@@ -84,7 +104,7 @@ int main(int argc, char *argv[]) {
     int opt;
     char ASport[6] = "58022";
     int verbose = 0; // Verbose mode flag
-    //TODO: COnfirm this stuff
+    //TODO: Confirm this stuff
     struct sigaction act; //TODO: SIGPIPE signal will be ignored
                           //TODO: if the connection is lost and you write to the socket, the write will return -1 and errno will be set to EPIPE
     memset(&act,0,sizeof act);
@@ -120,12 +140,12 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     } else if (pid != 0) {
         // Parent process
-        if(handleUDPRequests(ASport, verbose) == -1) {
+        if(handleTCPRequests(ASport, verbose) == -1) {
             //TODO: Terminate Server by closing what is necessary
         }
     } else {
         // Child process
-        if(handleTCPRequests(ASport, verbose) == -1){
+        if(handleUDPRequests(ASport, verbose) == -1){
             //TODO: Terminate Server by closing what is necessary
         }
     }
@@ -177,7 +197,7 @@ int handleUDPRequests(char* ASport, int verbose) {
     ssize_t n = bind(udpSocket, res->ai_addr, res->ai_addrlen);
     if (n == -1) {
         // If bind fails, print error and exit
-        perror("Bind failed");
+        perror("Error binding UDP socket:");
         freeaddrinfo(res);
         return -1;
     }
@@ -253,13 +273,20 @@ int handleTCPRequests(char* ASport, int verbose){
     socklen_t addrlen;
     struct addrinfo hints, *res;
     struct sockaddr_in addr;
-    char *buffer[MAX_BUFFER_SIZE];
+    char buffer[MAX_BUFFER_SIZE];
     char response[MAX_BUFFER_SIZE];
 
     // Create a TCP socket
     int tcpSocket = createTCPSocket();
     if (tcpSocket == -1) {
         return -1;
+    }
+
+    // Set the SO_REUSEADDR option
+    int yes = 1;
+    if (setsockopt(tcpSocket, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1) {
+        perror("setsockopt");
+        exit(EXIT_FAILURE);
     }
 
     // Set up hints for getaddrinfo
@@ -316,11 +343,6 @@ int handleTCPRequests(char* ASport, int verbose){
             close(sessionFd);
             continue;
         } else if (tcpPid != 0) {
-            // Parent process
-            // Close the connection and continue to the next iteration
-            close(sessionFd);
-            continue;
-        } else {
             // Child process
             // Close the listening socket
             close(tcpSocket);
@@ -336,18 +358,19 @@ int handleTCPRequests(char* ASport, int verbose){
 
             // Parse the action from the received data
             char* action = strtok(buffer, " ");
+            char* data = strtok(NULL, "\n");
 
             // Handle the action
             if (strcmp(action, "LIN") == 0) {
-                handleLoginRequest(buffer, response, verbose);
+                handleLoginRequest(data, response, verbose);
             } else if (strcmp(action, "OPA") == 0) {
-                handleOpenAuctionRequest(buffer, response, verbose);
+                handleOpenAuctionRequest(data, response, verbose);
             } else if (strcmp(action, "CLS") == 0) {
-                handleCloseAuctionRequest(buffer, response, verbose);
+                handleCloseAuctionRequest(data, response, verbose);
             } else if (strcmp(action, "SAS") == 0) {
-                handleShowAssetRequest(buffer, response, verbose);
+                handleShowAssetRequest(data, response, verbose);
             } else if (strcmp(action, "BID") == 0) {
-                handleBidRequest(buffer, response, verbose);
+                handleBidRequest(data, response, verbose);
             } else {
                 // If the action is unknown, send an error response
                 sprintf(response, "ERR\n"); 
@@ -368,6 +391,11 @@ int handleTCPRequests(char* ASport, int verbose){
             // Close the connection and exit
             close(sessionFd);
             exit(EXIT_SUCCESS);
+        } else {
+            // Parent process
+            // Close the connection and continue to the next iteration
+            close(sessionFd);
+            continue;
         }
     }
     close(tcpSocket);
