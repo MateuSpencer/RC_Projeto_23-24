@@ -179,7 +179,7 @@ int UDPMessage(const char* message, char* reply, char* ASPort, char* ASIP) {
 
     // Set a timeout on the socket
     struct timeval timeout;
-    timeout.tv_sec = 5;  // 5 seconds
+    timeout.tv_sec = 1000000;  //TODO 5 seconds
     timeout.tv_usec = 0; // 0 microseconds
     if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) == -1) {
         perror("setsockopt");
@@ -230,7 +230,7 @@ int TCPMessage(const char* message, char* reply, char* ASPort, char* ASIP, int s
 
     // Set a timeout on the socket
     struct timeval timeout;
-    timeout.tv_sec = 5;  // 5 seconds
+    timeout.tv_sec = 1000000;  //TODO: 5 seconds
     timeout.tv_usec = 0; // 0 seconds
     if (setsockopt(tcpSocket, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) == -1) {
         perror("setsockopt");
@@ -525,7 +525,7 @@ void myBids(char* UID, char* ASIP, char* ASPort) {
     } else {
         char pairs[1998][4]; 
 
-        // Remove newline character from input
+        // Remove newline character from reply
         reply[strcspn(reply, "\n")] = '\0';
 
         // Parse pairs of words
@@ -535,22 +535,17 @@ void myBids(char* UID, char* ASIP, char* ASPort) {
             // Save the pair
             strncpy(pairs[count], token, 3);
             pairs[count][3] = '\0'; // Null-terminate the word
-
             // Move to the next token
             token = strtok(NULL, " ");
-
             // Increment the count
             count++;
-
             // Check if there is another token (the size should be 1)
             if (token != NULL) {
                 // Save the second word in the pair
                 strncpy(pairs[count], token, 1);
                 pairs[count][1] = '\0';
-
                 // Move to the next token
                 token = strtok(NULL, " ");
-
                 // Increment the count
                 count++;
             }
@@ -563,7 +558,6 @@ void myBids(char* UID, char* ASIP, char* ASPort) {
     }
 }
 
-//TODO FIX -  fica preso no rcvform no UDPMessage - maybe resposta demasiado grande?
 void listAuctions(char* ASIP, char* ASPort) {
     char message[MAX_BUFFER_SIZE];
     snprintf(message, sizeof(message), "LST\n");
@@ -576,7 +570,37 @@ void listAuctions(char* ASIP, char* ASPort) {
     if(strcmp(reply, "RLS NOK\n") == 0){
         printf("No auctions have been started.\n");
     } else {
-        printf("%s", reply);
+        char pairs[1998][4]; //TODO: repeated code from above...
+
+        // Remove newline character from reply
+        reply[strcspn(reply, "\n")] = '\0';
+
+        // Parse pairs of words
+        int count = 0;
+        char *token = strtok(reply + 6, " ");
+        while (token != NULL) {
+            // Save the pair
+            strncpy(pairs[count], token, 3);
+            pairs[count][3] = '\0'; // Null-terminate the word
+            // Move to the next token
+            token = strtok(NULL, " ");
+            // Increment the count
+            count++;
+            // Check if there is another token (the size should be 1)
+            if (token != NULL) {
+                // Save the second word in the pair
+                strncpy(pairs[count], token, 1);
+                pairs[count][1] = '\0';
+                // Move to the next token
+                token = strtok(NULL, " ");
+                // Increment the count
+                count++;
+            }
+        }
+        printf("All Auctions:\n"); //TODO: better description
+        for (int i = 0; i < count; i += 2) {
+            printf("Auction %s is in state %s\n", pairs[i], pairs[i + 1]); //TODO: dizer estado e nao número
+        }
     }
 }
 

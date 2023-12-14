@@ -271,7 +271,7 @@ int handleUDPRequests(char* ASport, int verbose) {
                 handleMyAuctionsRequest(data, response, verbose);
             } else if (strcmp(action, "LMB") == 0) {
                 handleMyBidsRequest(data, response, verbose);
-            } else if (strcmp(action, "LST") == 0) {
+            } else if (strcmp(action, "LST\n") == 0) {
                 handleListAuctionsRequest(response, verbose);
             } else if (strcmp(action, "SRC") == 0) {
                 handleShowRecordRequest(data, response, verbose);
@@ -474,6 +474,7 @@ int createDirectory(const char *path) {
 int createFile(const char *directory, const char *filename) {
     char filePath[100];
     snprintf(filePath, sizeof(filePath), "%s/%s", directory, filename);
+
     
     FILE *file = fopen(filePath, "w");
     
@@ -539,7 +540,6 @@ int validateUser(const char* UID, const char* password) {
                 char storedPassword[MAX_BUFFER_SIZE];
                 fscanf(file, "%s", storedPassword);
                 fclose(file);
-
                 return (strcmp(storedPassword, password) == 0) ? VALID_USER : INVALID_PASSWORD;
             }
         } else {
@@ -551,7 +551,7 @@ int validateUser(const char* UID, const char* password) {
         return USER_NOT_EXIST;
     }
 
-    return USER_NOT_EXIST;  // Default to USER_NOT_EXIST in case of unexpected errors
+    return -1; // Unexpected error
 }
 
 // Helper function to find the highest AID in the AUCTIONS directory and create a new directory for the next AID
@@ -637,10 +637,11 @@ int newBid(int AID, int newBidValue) {
 
         if (newBidValue > highestBid) {
             // Create a new entry for the bid
-            char bidFile[50];
-            snprintf(bidFile, sizeof(bidFile), "AS/AUCTIONS/%d/BIDS/%06d.txt", AID, newBidValue);
-            createFile(bidFile, "");
-            return 0;  // Bid accepted
+            char bidFilePath[50];
+            snprintf(bidFilePath, sizeof(bidFilePath), "AS/AUCTIONS/%d/BIDS", AID);
+            char bidFilename[50];
+            snprintf(bidFilename, sizeof(bidFilename), "%06d.txt", newBidValue);
+            return createFile(bidFilePath, bidFilename);
         } else {
             // Bid refused because a larger bid has already been placed
             return -2;
@@ -654,7 +655,7 @@ int newBid(int AID, int newBidValue) {
 // Helper function to validate if the user is logged in
 int validateUserLoggedIn(const char* UID) {
     char loginFile[50];
-    snprintf(loginFile, sizeof(loginFile), "AS/USERS/%s/login.txt", UID);
+    snprintf(loginFile, sizeof(loginFile), "AS/USERS/%s/%s_login.txt", UID, UID);
 
     // Check if the login file exists
     if (access(loginFile, F_OK) != -1) {
@@ -708,7 +709,7 @@ void handleLoginRequest(char* request, char* response, int verbose) {
     char* password = strtok(NULL, " ");
 
     // Validate user existence and password
-    int validation = validateUser(UID, password);
+    int validation = validateUser(UID, password);//TODO: check if user is already logged in first?
 
     if (validation == VALID_USER || validation == MISSING_PASSWORD) {
         // User is already registered and password is correct, log in
@@ -812,7 +813,7 @@ void handleOpenAuctionRequest(char *request, char *response, int verbose) {
     int timeactive = atoi(timeactive_str);
     //int Fsize = atoi(Fsize_str); //TODO: unused - remove?
 
-    int validation = validateUser(UID, password);
+    int validation = validateUser(UID, password); //TODO: check if user is already logged in first?
 
     if (validation == VALID_USER) {
         // Valid user
@@ -891,7 +892,7 @@ void handleCloseAuctionRequest(char* request, char* response, int verbose) {
     int AID = atoi(AID_str);
 
     // Check if UID and password are valid
-    int validation = validateUser(UID, password);
+    int validation = validateUser(UID, password); //TODO: check if user is already logged in first?
 
     if (validation == VALID_USER) {
         // Check if the auction exists
@@ -902,8 +903,8 @@ void handleCloseAuctionRequest(char* request, char* response, int verbose) {
                 if (!auctionAlreadyEnded(AID)) {
                     // Close the auction by creating the END file
                     char endFilePath[100];
-                    snprintf(endFilePath, sizeof(endFilePath), "AS/AUCTIONS/%s/END.txt", AID_str);
-                    if(createFile(endFilePath, "") == -1){
+                    snprintf(endFilePath, sizeof(endFilePath), "AS/AUCTIONS/%s", AID_str);
+                    if(createFile(endFilePath, "END.txt") == -1){
                         snprintf(response, MAX_BUFFER_SIZE, "ERR\n");
                         return;
                     }
@@ -928,7 +929,7 @@ void handleCloseAuctionRequest(char* request, char* response, int verbose) {
     }
 }
 
-void handleMyAuctionsRequest(char* request, char* response, int verbose) {
+void handleMyAuctionsRequest(char* request, char* response, int verbose) {//TODO: resposta mal formatada, maybe overwritte da segunda parte
     char auctionString[10];
     int auctionCount = 0;
 
@@ -953,7 +954,7 @@ void handleMyAuctionsRequest(char* request, char* response, int verbose) {
             if (entry->d_type == DT_DIR && strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
                 char* AID = entry->d_name;
                 // Check if the auction has ended
-                char state = hasAuctionEnded(atoi(AID)) ? '0' : '1';
+                char state = hasAuctionEnded(atoi(AID)) ? '0' : '1'; //TODO: REMOVE?  (myauctions, mybids, list) vêm tanto auctions ativos como inativos
                 // Append AID and state to the string
                 snprintf(auctionString, sizeof(auctionString), " %s %c", AID, state);
                 strncat(response, auctionString, MAX_BUFFER_SIZE - strlen(response) - 1);
@@ -972,7 +973,7 @@ void handleMyAuctionsRequest(char* request, char* response, int verbose) {
             if (entry->d_type == DT_DIR && strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
                 char* AID = entry->d_name;
                 // Check if the auction has ended
-                char state = hasAuctionEnded(atoi(AID)) ? '0' : '1';
+                char state = hasAuctionEnded(atoi(AID)) ? '0' : '1'; //TODO: REMOVE?  (myauctions, mybids, list) vêm tanto auctions ativos como inativos
                 // Append AID and state to the string
                 snprintf(auctionString, sizeof(auctionString), " %s %c", AID, state);
                 strncat(response, auctionString, MAX_BUFFER_SIZE - strlen(response) - 1);
@@ -1027,7 +1028,7 @@ void handleMyBidsRequest(char* request, char* response, int verbose) { //TODO: D
                     if (entry->d_type == DT_REG) {  // Regular file (assuming each entry is a file)
                         char* AID = entry->d_name;
                         // Check if the auction has ended
-                        char state = hasAuctionEnded(atoi(AID)) ? '0' : '1';
+                        char state = hasAuctionEnded(atoi(AID)) ? '0' : '1';//TODO: REMOVE?  (myauctions, mybids, list) vêm tanto auctions ativos como inativos
 
                         // Append AID and state to the response string
                         snprintf(bidString, sizeof(bidString), " %s %c", AID, state);
@@ -1073,7 +1074,7 @@ void handleListAuctionsRequest(char* response, int verbose) {
             if (entry->d_type == DT_DIR && strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
                 char* AID = entry->d_name;
                 // Check if the auction has ended
-                char state = hasAuctionEnded(atoi(AID)) ? '0' : '1';
+                char state = hasAuctionEnded(atoi(AID)) ? '0' : '1'; //TODO: REMOVE?  (myauctions, mybids, list) vêm tanto auctions ativos como inativos
                 // Append AID and state to the string
                 snprintf(auctionString, sizeof(auctionString), " %s %c", AID, state);
                 strncat(response, auctionString, MAX_BUFFER_SIZE - strlen(response) - 1);
@@ -1163,7 +1164,7 @@ void handleBidRequest(char* request, char* response, int verbose) {
     int value = atoi(value_str);
 
     // Check if UID and password are valid
-    int validation = validateUser(UID, password);
+    int validation = validateUser(UID, password); //TODO: check if user is already logged in first?
 
     if (validation == VALID_USER) {
         // Check if the auction exists and if the auction is ongoing 
@@ -1291,7 +1292,7 @@ void handleLogoutRequest(char* request, char* response, int verbose) {
     char* password = strtok(NULL, " ");
 
     // Validate user existence and password
-    int validation = validateUser(UID, password);
+    int validation = validateUser(UID, password); //TODO: check if user is already logged in first?
     if (validation == VALID_USER) {
         // User is logged out
         char userDir[50];
@@ -1323,7 +1324,7 @@ void handleUnregisterRequest(char* request, char* response, int verbose) {
     char* password = strtok(NULL, " ");
 
     // Validate user existence and password
-    int validation = validateUser(UID, password);
+    int validation = validateUser(UID, password); //TODO: check if user is already logged in first?
 
     if (validation == VALID_USER) {
         // User exists and password is correct, unregister the user
