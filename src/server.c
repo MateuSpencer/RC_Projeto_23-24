@@ -1150,7 +1150,7 @@ void handleShowAssetRequest(char* request, char* response, int verbose) {
     }
 }
 
-void handleBidRequest(char* request, char* response, int verbose) {
+void handleBidRequest(char* request, char* response, int verbose) {//TODO falta checkar o minimum starting bid, maybe no new bid
     if (verbose) {
         printf("Request received: %s\n", request);
     }
