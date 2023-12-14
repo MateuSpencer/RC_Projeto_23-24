@@ -475,7 +475,7 @@ char (*parsePairs(const char *reply, char pairs[1998][4]))[4] {
         }
     }
 
-    free(mutableReply); // Liberar a memória alocada por strdup
+    free(mutableReply);
 
     return pairs;
 }
