@@ -441,6 +441,44 @@ void closeAuction(char* UID, char* password, char* AID, char* ASIP, char* ASPort
     }
 }
 
+//function used on mb, ma and l to parse their input
+char (*parsePairs(const char *reply, char pairs[1998][4]))[4] {
+    // Remove newline character from input
+    char *mutableReply = strdup(reply);
+    mutableReply[strcspn(mutableReply, "\n")] = '\0';
+
+    // Parse pairs of words
+    int count = 0;
+    char *token = strtok(mutableReply + 6, " ");
+    while (token != NULL && count < 1998) {
+        // Save the pair
+        strncpy(pairs[count], token, 3);
+        pairs[count][3] = '\0'; // Null-terminate the word
+
+        // Move to the next token
+        token = strtok(NULL, " ");
+
+        // Increment the count
+        count++;
+
+        // Check if there is another token (the size should be 1)
+        if (token != NULL && count < 1988) {
+            // Save the second word in the pair
+            strncpy(pairs[count], token, 1);
+            pairs[count][1] = '\0';
+
+            // Move to the next token
+            token = strtok(NULL, " ");
+
+            // Increment the count
+            count++;
+        }
+    }
+
+    free(mutableReply); // Liberar a memória alocada por strdup
+
+    return pairs;
+}
 
 void myAuctions(char* UID, char* ASIP, char* ASPort) {
     char message[MAX_BUFFER_SIZE];
@@ -455,45 +493,15 @@ void myAuctions(char* UID, char* ASIP, char* ASPort) {
     } else if(strcmp(reply, "RMA NLG\n") == 0){
         printf("%s is not logged in.\n", UID);
     } else {
-        char pairs[1998][4]; 
-
-        // Remove newline character from input
-        reply[strcspn(reply, "\n")] = '\0';
-
-        // Parse pairs of words
-        int count = 0;
-        char *token = strtok(reply + 6, " ");
-        while (token != NULL) {
-            // Save the pair
-            strncpy(pairs[count], token, 3);
-            pairs[count][3] = '\0'; // Null-terminate the word
-
-            // Move to the next token
-            token = strtok(NULL, " ");
-
-            // Increment the count
-            count++;
-
-            // Check if there is another token (the size should be 1)
-            if (token != NULL) {
-                // Save the second word in the pair
-                strncpy(pairs[count], token, 1);
-                pairs[count][1] = '\0';
-
-                // Move to the next token
-                token = strtok(NULL, " ");
-
-                // Increment the count
-                count++;
-            }
-        }
+        char pairs[1998][4];
+        char (*result)[4] = parsePairs(reply, pairs);
 
         printf("%s's Auctions:\n", UID);
-        for (int i = 0; i < count; i += 2) {
-            if(strcmp(pairs[i + 1],"1")==0){
-                printf("Auction %s is active\n", pairs[i]);
+        for (int i = 0; i < 1998 && result[i][0] != '\0'; i += 2) {
+            if(strcmp(result[i + 1],"1")==0){
+                printf("Auction %s is active\n", result[i]);
             }else{
-                printf("Auction %s is closed\n", pairs[i]);
+                printf("Auction %s is closed\n", result[i]);
             }
         }
     }
@@ -512,40 +520,15 @@ void myBids(char* UID, char* ASIP, char* ASPort) {
     } else if(strcmp(reply, "RMB NLG\n") == 0){
         printf("%s is not logged in.\n", UID);
     } else {
-        char pairs[1998][4]; 
+        char pairs[1998][4];
+        char (*result)[4] = parsePairs(reply, pairs);
 
-        // Remove newline character from reply
-        reply[strcspn(reply, "\n")] = '\0';
-
-        // Parse pairs of words
-        int count = 0;
-        char *token = strtok(reply + 6, " ");
-        while (token != NULL) {
-            // Save the pair
-            strncpy(pairs[count], token, 3);
-            pairs[count][3] = '\0'; // Null-terminate the word
-            // Move to the next token
-            token = strtok(NULL, " ");
-            // Increment the count
-            count++;
-            // Check if there is another token (the size should be 1)
-            if (token != NULL) {
-                // Save the second word in the pair
-                strncpy(pairs[count], token, 1);
-                pairs[count][1] = '\0';
-                // Move to the next token
-                token = strtok(NULL, " ");
-                // Increment the count
-                count++;
-            }
-        }
-
-        printf("%s's Bid:\n", UID);
-        for (int i = 0; i < count; i += 2) {
-            if(strcmp(pairs[i + 1],"1")==0){
-                printf("You bidded on auction %s which is active\n", pairs[i]);
+        printf("%s's Bids:\n", UID);
+        for (int i = 0; i < 1998 && result[i][0] != '\0'; i += 2) {
+            if(strcmp(result[i + 1],"1")==0){
+                printf("You bidded on auction %s which is active\n", result[i]);
             }else{
-                printf("You bidded on auction %s which is closed\n", pairs[i]);
+                printf("You bidded on auction %s which is closed\n", result[i]);
             }
         }
     }
@@ -563,39 +546,14 @@ void listAuctions(char* ASIP, char* ASPort) {
     if(strcmp(reply, "RLS NOK\n") == 0){
         printf("No auctions have been started.\n");
     } else {
-        char pairs[1998][4]; //TODO: repeated code from above...
-
-        // Remove newline character from reply
-        reply[strcspn(reply, "\n")] = '\0';
-
-        // Parse pairs of words
-        int count = 0;
-        char *token = strtok(reply + 6, " ");
-        while (token != NULL) {
-            // Save the pair
-            strncpy(pairs[count], token, 3);
-            pairs[count][3] = '\0'; // Null-terminate the word
-            // Move to the next token
-            token = strtok(NULL, " ");
-            // Increment the count
-            count++;
-            // Check if there is another token (the size should be 1)
-            if (token != NULL) {
-                // Save the second word in the pair
-                strncpy(pairs[count], token, 1);
-                pairs[count][1] = '\0';
-                // Move to the next token
-                token = strtok(NULL, " ");
-                // Increment the count
-                count++;
-            }
-        }
+        char pairs[1998][4];
+        char (*result)[4] = parsePairs(reply, pairs);
         printf("All Auctions:\n"); //TODO: better description
-        for (int i = 0; i < count; i += 2) {
-            if(strcmp(pairs[i + 1],"1")==0){
-                printf("Auction %s is active\n", pairs[i]);
+        for (int i = 0; i < 1998 && result[i][0] != '\0'; i += 2) {
+            if(strcmp(result[i + 1],"1")==0){
+                printf("Auction %s is active\n", result[i]);
             }else{
-                printf("Auction %s is closed\n", pairs[i]);
+                printf("Auction %s is closed\n", result[i]);
             }
         }
     }
