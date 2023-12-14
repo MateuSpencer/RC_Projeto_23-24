@@ -170,7 +170,6 @@ int main(int argc, char *argv[]) {
 
 int UDPMessage(const char* message, char* reply, char* ASPort, char* ASIP) {
     int fd, errcode;
-    ssize_t n;
     socklen_t addrlen;
     struct addrinfo hints, *res;
     struct sockaddr_in addr;
@@ -206,9 +205,7 @@ int UDPMessage(const char* message, char* reply, char* ASPort, char* ASIP) {
 int TCPMessage(const char* message, char* reply, char* ASPort, char* ASIP, int size) {
     int tcpSocket, errcode;
     ssize_t n;
-    socklen_t addrlen;
     struct addrinfo hints, *res;
-    struct sockaddr_in addr;
 
     tcpSocket = createTCPSocket();
 
@@ -381,7 +378,7 @@ char *readFile(const char *filename) {
     }
 
     fseek(file, 0, SEEK_END);
-    long fileSize = ftell(file);
+    size_t fileSize = ftell(file);
     rewind(file);
 
     char *buffer = (char *)malloc(fileSize + 1);

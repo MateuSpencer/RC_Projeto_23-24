@@ -786,13 +786,14 @@ void handleOpenAuctionRequest(char *request, char *response, int verbose) {
     char *timeactive_str = strtok(NULL, " ");
     char *Fname = strtok(NULL, " ");
     char *Fsize_str = strtok(NULL, " ");
+    (void)Fsize_str; // unused
     char *Fdata = strtok(NULL, "\n");
 
     //TODO: assert correct sizes and formats MAX_FILENAME_SIZE, MAX_FSIZE_LEN, MAX_FSIZE_NUM, UID_SIZE, PASSWORD_SIZE...
 
     int start_value = atoi(start_value_str);
     int timeactive = atoi(timeactive_str);
-    int Fsize = atoi(Fsize_str); //TODO: unused
+    //int Fsize = atoi(Fsize_str); //TODO: unused - remove?
 
     int validation = validateUser(UID, password);
 
@@ -1222,7 +1223,7 @@ void handleShowRecordRequest(char* request, char* response, int verbose) { //TOD
             while ((entry = readdir(bidsDirPtr)) != NULL) {
                 if (entry->d_type == DT_REG) {  // Regular file
                     int bid_value = atoi(entry->d_name);
-                    char bidFilePath[100];
+                    char bidFilePath[400];
                     snprintf(bidFilePath, sizeof(bidFilePath), "%s/%s", bidsDir, entry->d_name);
 
                     FILE* bidFile = fopen(bidFilePath, "r");
