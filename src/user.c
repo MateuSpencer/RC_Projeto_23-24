@@ -11,7 +11,7 @@
 
 // #include "common.h"
 
-#define MAX_BUFFER_SIZE 4000
+#define MAX_BUFFER_SIZE 6000
 #define UID_SIZE 6
 #define PASSWORD_SIZE 8
 #define MAX_FILENAME_SIZE 24
@@ -307,21 +307,6 @@ int TCPMessage(const char* message, char* reply, char* ASPort, char* ASIP, int s
     }
     reply[alreadyRead - 1] = '\0';
 
-    /*n = read(fd, reply, MAX_BUFFER_SIZE);
-    if (n == -1) {
-        perror("read");
-        freeaddrinfo(res);
-        close(fd);
-        return -1;
-    }
-
-    // Find the position of the newline character in the received data
-    char* newline_pos = strchr(reply, '\n');
-    if (newline_pos != NULL) {
-        newline_pos++;
-        *newline_pos = '\0';
-    }*/
-
     freeaddrinfo(res);
     close(tcpSocket);
     return (ssize_t)alreadyRead; // Return the number of bytes read
@@ -505,7 +490,11 @@ void myAuctions(char* UID, char* ASIP, char* ASPort) {
 
         printf("%s's Auctions:\n", UID);
         for (int i = 0; i < count; i += 2) {
-            printf("Auction %s is in state %s\n", pairs[i], pairs[i + 1]);
+            if(strcmp(pairs[i + 1],"1")==0){
+                printf("Auction %s is active\n", pairs[i]);
+            }else{
+                printf("Auction %s is closed\n", pairs[i]);
+            }
         }
     }
 }
@@ -553,7 +542,11 @@ void myBids(char* UID, char* ASIP, char* ASPort) {
 
         printf("%s's Bid:\n", UID);
         for (int i = 0; i < count; i += 2) {
-            printf("You bidded on auction %s which is in state %s\n", pairs[i], pairs[i + 1]);
+            if(strcmp(pairs[i + 1],"1")==0){
+                printf("You bidded on auction %s which is active\n", pairs[i]);
+            }else{
+                printf("You bidded on auction %s which is closed\n", pairs[i]);
+            }
         }
     }
 }
@@ -599,7 +592,11 @@ void listAuctions(char* ASIP, char* ASPort) {
         }
         printf("All Auctions:\n"); //TODO: better description
         for (int i = 0; i < count; i += 2) {
-            printf("Auction %s is in state %s\n", pairs[i], pairs[i + 1]); //TODO: dizer estado e nao número
+            if(strcmp(pairs[i + 1],"1")==0){
+                printf("Auction %s is active\n", pairs[i]);
+            }else{
+                printf("Auction %s is closed\n", pairs[i]);
+            }
         }
     }
 }
@@ -743,4 +740,3 @@ int unregister(char* UID, char* password, char* ASIP, char* ASPort) {
     }
     return -1;
 }
-
