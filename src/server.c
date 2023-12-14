@@ -84,11 +84,17 @@ void handleUnregisterRequest(char* request, char* response, int verbose);
 
 volatile sig_atomic_t terminationRequested = 0;
 
-// Signal handler for SIGINT
-void sigintHandler(int signum) {
-    (void)signum;
-    terminationRequested = 1;
-    printf("\nReceived SIGINT, terminating server...\n");
+void signalHandler(int signum) {
+    switch(signum) {
+        case SIGINT:
+            terminationRequested = 1;
+            printf("\nReceived SIGINT, terminating server...\n");
+            break;
+        case SIGTSTP:
+            terminationRequested = 1;
+            printf("\nReceived SIGTSTP, pausing server...\n");
+            break;
+    }
 }
 
 int main(int argc, char *argv[]) {
@@ -96,11 +102,22 @@ int main(int argc, char *argv[]) {
     char ASport[6] = "58022";
     int verbose = 0; // Verbose mode flag
 
-    // Set up the SIGINT signal handler
+     // Set up signal handlers
     struct sigaction sa;
     memset(&sa, 0, sizeof(sa));
-    sa.sa_handler = sigintHandler;
-    sigaction(SIGINT, &sa, NULL);
+    sa.sa_handler = signalHandler;
+
+    // Register SIGINT handler
+    if (sigaction(SIGINT, &sa, NULL) == -1) {
+        perror("Error setting up SIGINT handler");
+        return EXIT_FAILURE;
+    }
+
+    // Register SIGTSTP handler
+    if (sigaction(SIGTSTP, &sa, NULL) == -1) {
+        perror("Error setting up SIGTSTP handler");
+        return EXIT_FAILURE;
+    }
 
     //TODO: Confirm this stuff
     struct sigaction act; //TODO: SIGPIPE signal will be ignored
@@ -128,7 +145,7 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    printf("To Terminate: CTRL+C\n");
+    printf("To Terminate use CTRL+C or CTRL+Z\n");
     
     // Fork a new process
     pid_t pid = fork();

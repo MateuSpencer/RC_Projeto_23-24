@@ -72,6 +72,7 @@ int main(int argc, char *argv[]) {
             i++;
         }
     }
+    //TODO: Confirmar que pastas certas estão criadas?
 
     // Application loop
     while (1) {
@@ -121,7 +122,7 @@ int main(int argc, char *argv[]) {
             scanf("%s", AID);
             showAsset(AID, ASIP, ASport);
 
-        } else if (strcmp(token, "bid") == 0) {
+        } else if (strcmp(token, "bid") == 0 || strcmp(token, "b") == 0) {
             char AID[4];
             char value[MAX_BUFFER_SIZE];
             scanf("%s %s", AID, value);
@@ -157,7 +158,7 @@ int main(int argc, char *argv[]) {
             if(presentLoginCredentials == 0){
                 break; // Exit the loop and end the program
             } else {
-                printf("User is logged in. Please log out first.\n");
+                printf("User is logged in. Please log out first.\n"); //TODO: what about if server has shut down?
             }
 
         } else {
@@ -176,6 +177,16 @@ int UDPMessage(const char* message, char* reply, char* ASPort, char* ASIP) {
 
     fd = createUDPSocket();
 
+    // Set a timeout on the socket
+    struct timeval timeout;
+    timeout.tv_sec = 5;  // 5 seconds
+    timeout.tv_usec = 0; // 0 microseconds
+    if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) == -1) {
+        perror("setsockopt");
+        close(fd);
+        return -1;
+    }
+
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_INET;      // IPv4
     hints.ai_socktype = SOCK_DGRAM; // UDP socket
@@ -188,16 +199,20 @@ int UDPMessage(const char* message, char* reply, char* ASPort, char* ASIP) {
     }
 
     ssize_t received;
-    if (sendto(fd, message, strlen(message), 0, res->ai_addr, res->ai_addrlen) != -1 &&
-        (received = recvfrom(fd, reply, MAX_BUFFER_SIZE, 0, (struct sockaddr *)&addr, &addrlen)) > 0) {
-        char* newline_pos = strchr(reply, '\n');
-        if (newline_pos != NULL) {
-            newline_pos++;
-            *newline_pos = '\0';
+    if (sendto(fd, message, strlen(message), 0, res->ai_addr, res->ai_addrlen) != -1) {
+        received = recvfrom(fd, reply, MAX_BUFFER_SIZE, 0, (struct sockaddr *)&addr, &addrlen);
+        if (received > 0) {
+            char* newline_pos = strchr(reply, '\n');
+            if (newline_pos != NULL) {
+                newline_pos++;
+                *newline_pos = '\0';
+            }
+            freeaddrinfo(res);
+            close(fd);
+            return received; // Return the number of bytes read
+        } else if (received == -1 && errno == EWOULDBLOCK) {
+            fprintf(stderr, "Timeout waiting for response\n");
         }
-        freeaddrinfo(res);
-        close(fd);
-        return received; // Return the number of bytes read
     }
     return -1;
 }
@@ -212,14 +227,22 @@ int TCPMessage(const char* message, char* reply, char* ASPort, char* ASIP, int s
     if (tcpSocket == -1) {
         return -1;
     }
-    
-    // Set the SO_REUSEADDR option
-    int yes = 1;
-    if (setsockopt(tcpSocket, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1) {
-        perror("setsockopt");
-        exit(EXIT_FAILURE);
-    }
 
+    // Set a timeout on the socket
+    struct timeval timeout;
+    timeout.tv_sec = 5;  // 5 seconds
+    timeout.tv_usec = 0; // 0 seconds
+    if (setsockopt(tcpSocket, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) == -1) {
+        perror("setsockopt");
+        close(tcpSocket);
+        return -1;
+    }
+    if (setsockopt(tcpSocket, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)) == -1) {
+        perror("setsockopt");
+        close(tcpSocket);
+        return -1;
+    }
+    
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM; // TCP socket
@@ -242,9 +265,14 @@ int TCPMessage(const char* message, char* reply, char* ASPort, char* ASIP, int s
     size_t toWrite = strlen(message)+size;
     size_t written = 0;
     while (written < toWrite) {
+        errno = 0;  // Reset errno before the call to write
         ssize_t n = write(tcpSocket, message + written, toWrite - written);
         if (n <= 0) {
-            perror("write");
+            if (errno == EWOULDBLOCK) {
+                fprintf(stderr, "Timeout occurred during write\n");
+            } else {
+                perror("write");
+            }
             freeaddrinfo(res);
             close(tcpSocket);
             return -1;
@@ -254,10 +282,14 @@ int TCPMessage(const char* message, char* reply, char* ASPort, char* ASIP, int s
 
     size_t alreadyRead = 0;
     while (1) {
-        errno = 0;
+        errno = 0;  // Reset errno before the call to read
         ssize_t n = read(tcpSocket, reply + alreadyRead, 1 * sizeof(char));
         if (n <= 0) {
-            perror("read");
+            if (errno == EWOULDBLOCK) {
+                fprintf(stderr, "Timeout occurred during read\n");
+            } else {
+                perror("read");
+            }
             freeaddrinfo(res);
             close(tcpSocket);
             return -1;
