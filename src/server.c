@@ -935,6 +935,7 @@ void handleCloseAuctionRequest(char* request, char* response, int verbose) {
                         snprintf(response, MAX_BUFFER_SIZE, "ERR\n");
                         return;
                     }
+                    //TODO: Falta escrever end datetime end sec time
                     strcpy(response, "RCL OK\n");
                     return;
                 } else {
@@ -1184,7 +1185,9 @@ void handleShowAssetRequest(char* request, char* response, int verbose) {
     }
 }
 
-void handleBidRequest(char* request, char* response, int verbose) {//TODO falta checkar o minimum starting bid, maybe no new bid
+//TODO falta checkar o minimum starting bid, maybe no new bid
+//TODO: falta ver se o tempo de final ja chegou, se sim é criar o ficheiro END e nao aceitar a bid (no close auction por a parte de criar o ficehiro END e escrever numa função)
+void handleBidRequest(char* request, char* response, int verbose) {
     if (verbose) {
         printf("Request received: %s\n", request);
     }
@@ -1301,6 +1304,7 @@ void handleShowRecordRequest(char* request, char* response, int verbose) { //TOD
             closedir(bidsDirPtr);
         }
 
+        //TODO: falta ver se o tempo de final ja chegou, se sim é criar o ficheiro END antes de tentar le-lo(no close auction por a parte de criar o ficehiro END e escrever numa função)
         // Check if the auction is already closed
         char endFilePath[100];
         snprintf(endFilePath, sizeof(endFilePath), "%s/END.txt", auctionDir);
