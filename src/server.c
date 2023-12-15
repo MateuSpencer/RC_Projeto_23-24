@@ -286,6 +286,7 @@ int handleUDPRequests(char* ASport, int verbose) {
             }
         }
         // Send the response to the client
+        //char* newline_pos = strchr(response, '\n');
         n = sendto(udpSocket, response, sizeof(response), 0, (struct sockaddr *)&addr, addrlen);
         if (n == -1) {
             // If sendto fails, print error and continue to the next iteration
@@ -833,7 +834,7 @@ void handleOpenAuctionRequest(char *request, char *response, int verbose) {
         if (AID != -1) {
             // Create START file
             char startFilePath[100];
-            snprintf(startFilePath, sizeof(startFilePath), "AS/AUCTIONS/%d/START.txt", AID);
+            snprintf(startFilePath, sizeof(startFilePath), "AS/AUCTIONS/%03d/START.txt", AID);
             FILE *startFile = fopen(startFilePath, "w");
             if (startFile != NULL) {
                 fprintf(startFile, "%s %s %s %d %d", UID, name, Fname, start_value, timeactive);
@@ -846,7 +847,7 @@ void handleOpenAuctionRequest(char *request, char *response, int verbose) {
 
             // Create asset file
             char assetFilePath[100];
-            snprintf(assetFilePath, sizeof(assetFilePath), "AS/AUCTIONS/%d/%s", AID, Fname);
+            snprintf(assetFilePath, sizeof(assetFilePath), "AS/AUCTIONS/%03d/%s", AID, Fname);
             if(writeFile(assetFilePath, Fdata) == -1){
                 snprintf(response, MAX_BUFFER_SIZE, "ERR\n");
                 return;
@@ -854,7 +855,7 @@ void handleOpenAuctionRequest(char *request, char *response, int verbose) {
 
             // Create BIDS directory
             char bidsDir[50];
-            snprintf(bidsDir, sizeof(bidsDir), "AS/AUCTIONS/%d/BIDS", AID);
+            snprintf(bidsDir, sizeof(bidsDir), "AS/AUCTIONS/%03d/BIDS", AID);
             if(createDirectory(bidsDir) == -1){
                 snprintf(response, MAX_BUFFER_SIZE, "ERR\n");
                 return;
@@ -869,14 +870,14 @@ void handleOpenAuctionRequest(char *request, char *response, int verbose) {
             }
 
             char hostedFilename[100];
-            snprintf(hostedFilename, sizeof(hostedFilename), "%d.txt", AID);
+            snprintf(hostedFilename, sizeof(hostedFilename), "%03d.txt", AID);
             
             if(createFile(hostedDir, hostedFilename) == -1){
             snprintf(response, MAX_BUFFER_SIZE, "ERR\n");
             return;
         }
 
-            snprintf(response, MAX_BUFFER_SIZE, "ROA OK %d\n", AID);
+            snprintf(response, MAX_BUFFER_SIZE, "ROA OK %03d\n", AID);
         } else {
             // Error creating new AID directory
             snprintf(response, MAX_BUFFER_SIZE, "ROA NOK\n");
@@ -1058,6 +1059,12 @@ void handleMyBidsRequest(char* request, char* response, int verbose) { //TODO: D
             // User has no ongoing bids
             snprintf(response, MAX_BUFFER_SIZE, "RMB NOK\n");
             return;
+        }
+
+        if(bidCount==0){
+
+            snprintf(response, MAX_BUFFER_SIZE, "RMB NOK\n");
+
         }
     } else {
         // User is not logged in
