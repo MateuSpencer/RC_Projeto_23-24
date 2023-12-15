@@ -14,6 +14,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <signal.h>
+#include <ctype.h>
 
 // #include "common.h"
 
@@ -704,6 +705,18 @@ int fileExists(const char* filePath) {
     return 0;  // File does not exist
 }
 
+int isNumericAndLengthSix(const char *str) {
+    // Check if all characters are digits
+    for (int i = 0; str[i] != '\0'; i++) {
+        if (!isdigit(str[i])) {
+            return 0;  // Not a digit
+        }
+    }
+
+    // Check if the length is 6
+    return (strlen(str) == 6);
+}
+
 /* --------------------- HANDLER FUNCTIONS  -----------------------------------*/
 
 void handleLoginRequest(char* request, char* response, int verbose) {
@@ -717,6 +730,13 @@ void handleLoginRequest(char* request, char* response, int verbose) {
 
     char* UID = strtok(request, " ");
     char* password = strtok(NULL, " ");
+    printf("UID: %s\n",UID);
+    printf("Pass: %s\n", password);
+
+    if(!isNumericAndLengthSix(UID) || strlen(password)!=8){
+        snprintf(response, MAX_BUFFER_SIZE, "ERR\n");
+        return;
+    }
 
     // Validate user existence and password
     int validation = validateUser(UID, password);//TODO: check if user is already logged in first?
@@ -1378,4 +1398,5 @@ void handleUnregisterRequest(char* request, char* response, int verbose) {
         strcpy(response, "RUR NOK\n");
     }
 }
+
 
