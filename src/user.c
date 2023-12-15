@@ -11,12 +11,22 @@
 
 // #include "common.h"
 
-#define MAX_BUFFER_SIZE 6000
+#define MAX_BUFFER_SIZE 4000//TODO: faze out
+
+#define MAX_REQUEST_UDP_BUFFER_SIZE 21 //LIN / LOU
+#define MIN_REQUEST_UDP_BUFFER_SIZE 4 //LST
+#define MAX_RESPONSE_UDP_BUFFER_SIZE 4000 //TODO: what size limit?
+
+#define MAX_REQUEST_TCP_BUFFER_SIZE 4000 //TODO: what size limit?
+#define MIN_REQUEST_TCP_BUFFER_SIZE 4000 ///TODO: what size limit?
+#define MAX_RESPONSE_TCP_BUFFER_SIZE 4000 //TODO: what size limit?
+
 #define UID_SIZE 6
 #define PASSWORD_SIZE 8
 #define MAX_FILENAME_SIZE 24
 #define MAX_FSIZE_LEN 8
 #define MAX_FSIZE_NUM 0xA00000 // 10 MB
+#define TIMEOUT 100000 //TODO: 5 seconds
 
 int createUDPSocket() {
     int udpSocket = socket(AF_INET, SOCK_DGRAM, 0);
@@ -178,7 +188,7 @@ int UDPMessage(const char* message, char* reply, char* ASPort, char* ASIP) {
 
     // Set a timeout on the socket
     struct timeval timeout;
-    timeout.tv_sec = 1000000;  //TODO 5 seconds
+    timeout.tv_sec = TIMEOUT;
     timeout.tv_usec = 0; // 0 microseconds
     if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) == -1) {
         perror("setsockopt");
@@ -197,9 +207,8 @@ int UDPMessage(const char* message, char* reply, char* ASPort, char* ASIP) {
         return -1;
     }
 
-    ssize_t received;
     if (sendto(fd, message, strlen(message), 0, res->ai_addr, res->ai_addrlen) != -1) {
-        received = recvfrom(fd, reply, MAX_BUFFER_SIZE, 0, (struct sockaddr *)&addr, &addrlen);
+        ssize_t received = recvfrom(fd, reply, MAX_BUFFER_SIZE, 0, (struct sockaddr *)&addr, &addrlen);
         if (received > 0) {
             char* newline_pos = strchr(reply, '\n');
             if (newline_pos != NULL) {
@@ -229,7 +238,7 @@ int TCPMessage(const char* message, char* reply, char* ASPort, char* ASIP, int s
 
     // Set a timeout on the socket
     struct timeval timeout;
-    timeout.tv_sec = 1000000;  //TODO: 5 seconds
+    timeout.tv_sec = TIMEOUT;
     timeout.tv_usec = 0; // 0 seconds
     if (setsockopt(tcpSocket, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) == -1) {
         perror("setsockopt");

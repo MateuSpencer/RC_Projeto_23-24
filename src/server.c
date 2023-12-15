@@ -25,12 +25,22 @@
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
-#define MAX_BUFFER_SIZE 4000
+#define MAX_BUFFER_SIZE 4000//TODO: faze out
+
+#define MAX_REQUEST_UDP_BUFFER_SIZE 21 //LIN / LOU
+#define MIN_REQUEST_UDP_BUFFER_SIZE 4 //LST
+#define MAX_RESPONSE_UDP_BUFFER_SIZE 4000 //TODO: what size limit?
+
+#define MAX_REQUEST_TCP_BUFFER_SIZE 4000 //TODO: what size limit?
+#define MIN_REQUEST_TCP_BUFFER_SIZE 4000 ///TODO: what size limit?
+#define MAX_RESPONSE_TCP_BUFFER_SIZE 4000 //TODO: what size limit?
+
 #define UID_SIZE 6
 #define PASSWORD_SIZE 8
 #define MAX_FILENAME_SIZE 24
 #define MAX_FSIZE_LEN 8
 #define MAX_FSIZE_NUM 0xA00000 // 10 MB
+#define TIMEOUT 100000 //TODO: 5 seconds
 
 int createUDPSocket() {
     int udpSocket = socket(AF_INET, SOCK_DGRAM, 0);
@@ -146,7 +156,20 @@ int main(int argc, char *argv[]) {
 
     printf("To Terminate use CTRL+C or CTRL+Z\n");
 
-    //TODO: Confirmar que pastas certas estão criadas? senão criar?
+    // Create the AS, USERS, and AUCTIONS directories if they don't exist
+    char dir[50];
+    snprintf(dir, sizeof(dir), "AS");
+    if(createDirectory(dir) == -1){
+        exit(EXIT_FAILURE);
+    }
+    snprintf(dir, sizeof(dir), "AS/AUCTIONS");
+    if(createDirectory(dir) == -1){
+        exit(EXIT_FAILURE);
+    }
+    snprintf(dir, sizeof(dir), "AS/USERS");
+    if(createDirectory(dir) == -1){
+        exit(EXIT_FAILURE);
+    }
     
     // Fork a new process
     pid_t pid = fork();
@@ -179,21 +202,18 @@ int handleUDPRequests(char* ASport, int verbose) {
     socklen_t addrlen;
     struct addrinfo hints, *res;
     struct sockaddr_in addr;
-    char udpBuffer[MAX_BUFFER_SIZE];//should this be as big as MAX_BUFFER_SIZE?
-    char response[MAX_BUFFER_SIZE];
-
+    char requestUDPbuffer[MAX_REQUEST_UDP_BUFFER_SIZE];
+    char responseUDPbuffer[MAX_RESPONSE_UDP_BUFFER_SIZE];
     // Create a UDP socket
     int udpSocket = createUDPSocket();
     if (udpSocket == -1) {
         return -1;
     }
-
     // Set up hints for getaddrinfo
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_DGRAM;
     hints.ai_flags = AI_PASSIVE;
-
     // Get address info
     errcode = getaddrinfo(NULL, ASport, &hints, &res);
     if (errcode != 0) {
@@ -201,7 +221,6 @@ int handleUDPRequests(char* ASport, int verbose) {
         perror("getaddrinfo failed");
         return -1;
     }
-
     // Bind the socket to the specified address
     ssize_t n = bind(udpSocket, res->ai_addr, res->ai_addrlen);
     if (n == -1) {
@@ -210,10 +229,8 @@ int handleUDPRequests(char* ASport, int verbose) {
         freeaddrinfo(res);
         return -1;
     }
-
     // Free the address info struct
     freeaddrinfo(res);
-
     // Set up the address length
     addrlen = sizeof(addr);
 
@@ -228,11 +245,9 @@ int handleUDPRequests(char* ASport, int verbose) {
         struct timeval timeout;
         FD_ZERO(&readSet);
         FD_SET(udpSocket, &readSet);
-
         // Set a timeout for select to periodically check for termination
         timeout.tv_sec = 1; 
         timeout.tv_usec = 0;
-
         // Use select to periodically check for termination
         int result = select(udpSocket + 1, &readSet, NULL, NULL, &timeout);
 
@@ -245,49 +260,48 @@ int handleUDPRequests(char* ASport, int verbose) {
             continue;
         }
         // Receive data from the client
-        n = recvfrom(udpSocket, udpBuffer, sizeof(udpBuffer), 0, (struct sockaddr *)&addr, &addrlen);
+        n = recvfrom(udpSocket, requestUDPbuffer, sizeof(requestUDPbuffer), 0, (struct sockaddr *)&addr, &addrlen);
         if (n <= 0) {
             // If recvfrom fails, print error and continue to the next iteration
             perror("Error receiving UDP message");
             continue;
         }
         // Null-terminate the received data
-        udpBuffer[n] = '\0';
-        if(verbose == 1){
-                printf("[TCP] Received: %s\n", udpBuffer);
-            }
-        // Process the received data
-        if (udpBuffer[n - 1] != '\n') {//TODO: por igual no TCP
-            // If the last character is not a newline, send an error response
-            sprintf(response, "ERR\n"); 
-        } else {
-            // Otherwise, parse the action and data from the received message
-            char* action = strtok(udpBuffer, " ");
-            char* data = strtok(NULL, "\n");
+        requestUDPbuffer[n] = '\0';
 
+        if(verbose == 1){
+            printf("[UDP] Received: %s\n", requestUDPbuffer);
+        }
+        
+        if (requestUDPbuffer[n - 1] != '\n' || strlen(requestUDPbuffer) <= MIN_REQUEST_UDP_BUFFER_SIZE) {
+            // If the last character is not a newline or if the request is smaller than the minimum, send an error response
+            sprintf(responseUDPbuffer, "ERR\n"); 
+        } else {
+            // Process the received data
+            char* action = strtok(requestUDPbuffer, " ");
+            char* data = strtok(NULL, "\n");
             // Handle the action
             if (strcmp(action, "LIN") == 0) {
-                handleLoginRequest(data, response, verbose);
+                handleLoginRequest(data, responseUDPbuffer, verbose);
             } else if (strcmp(action, "LMA") == 0) {
-                handleMyAuctionsRequest(data, response, verbose);
+                handleMyAuctionsRequest(data, responseUDPbuffer, verbose);
             } else if (strcmp(action, "LMB") == 0) {
-                handleMyBidsRequest(data, response, verbose);
+                handleMyBidsRequest(data, responseUDPbuffer, verbose);
             } else if (strcmp(action, "LST\n") == 0) {
-                handleListAuctionsRequest(response, verbose);
+                handleListAuctionsRequest(responseUDPbuffer, verbose);
             } else if (strcmp(action, "SRC") == 0) {
-                handleShowRecordRequest(data, response, verbose);
+                handleShowRecordRequest(data, responseUDPbuffer, verbose);
             } else if (strcmp(action, "LOU") == 0) {
-                handleLogoutRequest(data, response, verbose);
+                handleLogoutRequest(data, responseUDPbuffer, verbose);
             } else if (strcmp(action, "UNR") == 0) {
-                handleUnregisterRequest(data, response, verbose);
+                handleUnregisterRequest(data, responseUDPbuffer, verbose);
             } else {
                 // If the action is unknown, send an error response
-                sprintf(response, "ERR\n"); 
+                sprintf(responseUDPbuffer, "ERR\n"); 
             }
         }
         // Send the response to the client
-        //char* newline_pos = strchr(response, '\n');
-        n = sendto(udpSocket, response, sizeof(response), 0, (struct sockaddr *)&addr, addrlen);
+        n = sendto(udpSocket, responseUDPbuffer, sizeof(responseUDPbuffer), 0, (struct sockaddr *)&addr, addrlen);
         if (n == -1) {
             // If sendto fails, print error and continue to the next iteration
             perror("Error sending UDP message");
@@ -305,8 +319,8 @@ int handleTCPRequests(char* ASport, int verbose){
     socklen_t addrlen;
     struct addrinfo hints, *res;
     struct sockaddr_in addr;
-    char buffer[MAX_BUFFER_SIZE];
-    char response[MAX_BUFFER_SIZE];
+    char requestTCPbuffer[MAX_REQUEST_TCP_BUFFER_SIZE];
+    char responseTCPbuffer[MAX_RESPONSE_TCP_BUFFER_SIZE];
 
     // Create a TCP socket
     int tcpSocket = createTCPSocket();
@@ -314,7 +328,7 @@ int handleTCPRequests(char* ASport, int verbose){
         return -1;
     }
 
-    // TODO: check if this is needed Set the SO_REUSEADDR option
+    // TODO: check if this is needed...
     int yes = 1;
     if (setsockopt(tcpSocket, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1) {
         perror("setsockopt");
@@ -346,7 +360,7 @@ int handleTCPRequests(char* ASport, int verbose){
     freeaddrinfo(res);
 
     // Listen for incoming connections
-    if (listen(tcpSocket, 5) == -1) { //TODO: only 5 waiting requests?
+    if (listen(tcpSocket, 5) == -1) { //TODO: only 5 waiting requests? make this a #define
         // If listen fails, print error and exit
         perror("Error listening on TCP socket");
         return -1;
@@ -367,7 +381,7 @@ int handleTCPRequests(char* ASport, int verbose){
         FD_SET(tcpSocket, &readSet);
 
         // Set a timeout for select to periodically check for termination
-        timeout.tv_sec = 1; // Adjust this value based on your requirements
+        timeout.tv_sec = 1;
         timeout.tv_usec = 0;
 
         // Use select to periodically check for termination
@@ -399,46 +413,53 @@ int handleTCPRequests(char* ASport, int verbose){
             close(sessionFd);
             continue;
         } else if (tcpPid != 0) {
-            // Child process
+            // Parent process
             // Close the listening socket
             close(tcpSocket);
             // Read data from the client
             size_t alreadyRead = 0;
             ssize_t n;
-            while (alreadyRead < MAX_BUFFER_SIZE && (n = read(sessionFd, buffer + alreadyRead, sizeof(char))) > 0) {
+            while (alreadyRead < MAX_BUFFER_SIZE && (n = read(sessionFd, requestTCPbuffer + alreadyRead, sizeof(char))) > 0) {
                 alreadyRead += (size_t)n;
-                if (buffer[alreadyRead - 1] == '\n') {
+                if (requestTCPbuffer[alreadyRead - 1] == '\n') {
                     break;
                 }
             }
+            // Null-terminate the received data
+            requestTCPbuffer[alreadyRead] = '\0';
+
             if(verbose == 1){
-                printf("[TCP] Received: %s\n", buffer);
+                printf("[TCP] Received: %s\n", requestTCPbuffer);
             }
-            // Parse the action from the received data
-            char* action = strtok(buffer, " ");
-            char* data = strtok(NULL, "\n");
-
-            // Handle the action
-            if (strcmp(action, "LIN") == 0) {
-                handleLoginRequest(data, response, verbose);
-            } else if (strcmp(action, "OPA") == 0) {
-                handleOpenAuctionRequest(data, response, verbose);
-            } else if (strcmp(action, "CLS") == 0) {
-                handleCloseAuctionRequest(data, response, verbose);
-            } else if (strcmp(action, "SAS") == 0) {
-                handleShowAssetRequest(data, response, verbose);
-            } else if (strcmp(action, "BID") == 0) {
-                handleBidRequest(data, response, verbose);
+            if (requestTCPbuffer[alreadyRead - 1] != '\n' || strlen(requestTCPbuffer) <= MAX_REQUEST_TCP_BUFFER_SIZE) {
+                // If the last character is not a newline or if the request is smaller than the minimum, send an error response
+                sprintf(responseTCPbuffer, "ERR\n"); 
             } else {
-                // If the action is unknown, send an error response
-                sprintf(response, "ERR\n"); 
+                // Process the received data
+                char* action = strtok(requestTCPbuffer, " ");
+                char* data = strtok(NULL, "\n");
+                // Handle the action
+                if (strcmp(action, "LIN") == 0) {
+                    handleLoginRequest(data, responseTCPbuffer, verbose);
+                } else if (strcmp(action, "OPA") == 0) {
+                    handleOpenAuctionRequest(data, responseTCPbuffer, verbose);
+                } else if (strcmp(action, "CLS") == 0) {
+                    handleCloseAuctionRequest(data, responseTCPbuffer, verbose);
+                } else if (strcmp(action, "SAS") == 0) {
+                    handleShowAssetRequest(data, responseTCPbuffer, verbose);
+                } else if (strcmp(action, "BID") == 0) {
+                    handleBidRequest(data, responseTCPbuffer, verbose);
+                } else {
+                    // If the action is unknown, send an error response
+                    sprintf(responseTCPbuffer, "ERR\n"); 
+                }
             }
-
+            
             // Send the response to the client
-            size_t toWrite = strlen(response);
+            size_t toWrite = strlen(responseTCPbuffer);
             size_t written = 0;
             while (written < toWrite) {
-                ssize_t sent = write(sessionFd, response + written, MIN(MAX_BUFFER_SIZE, toWrite - written));
+                ssize_t sent = write(sessionFd, responseTCPbuffer + written, MIN(MAX_BUFFER_SIZE, toWrite - written));
                 if (sent <= 0) {
                     // If write fails, print error and break the loop
                     perror("Failed to write to to TCP Socket");
@@ -450,7 +471,9 @@ int handleTCPRequests(char* ASport, int verbose){
             close(sessionFd);
             exit(EXIT_SUCCESS);
         } else {
-            // Parent process
+            // Child Process
+
+            //TODO: trocar esta parte com a do parent(foi só para debug, da outra maneira fica mais claro)
             // Close the connection and continue to the next iteration
             close(sessionFd);
             continue;
