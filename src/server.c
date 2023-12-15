@@ -682,7 +682,7 @@ int isDirectoryEmpty(const char* path) {
 }
 
 // Helper function to check if an auction with the given AID has already ended
-bool auctionAlreadyEnded(int AID) {
+bool auctionAlreadyEnded(int AID) { //TODO: devia verificar se já excedeu o seu tempo de vida, se sim então fechar
     char endFile[100];
     snprintf(endFile, sizeof(endFile), "AS/AUCTIONS/%03d/END.txt", AID);
 
@@ -926,7 +926,7 @@ void handleCloseAuctionRequest(char* request, char* response, int verbose) {
         if (auctionExists(AID)) {
             // Check if the auction is owned by the user
             if (auctionOwnedByUser(AID, UID)) {
-                // Check if the auction has already ended
+                // Check if END.txt file is present
                 if (!auctionAlreadyEnded(AID)) {
                     // Close the auction by creating the END file
                     char endFilePath[100];
@@ -935,7 +935,8 @@ void handleCloseAuctionRequest(char* request, char* response, int verbose) {
                         snprintf(response, MAX_BUFFER_SIZE, "ERR\n");
                         return;
                     }
-                    //TODO: Falta escrever end datetime end sec time
+                    //TODO: check if the auction already exceeded the time limit and close it by writing the actual end time
+                        //If not, write the current end datetime end sec time
                     strcpy(response, "RCL OK\n");
                     return;
                 } else {
