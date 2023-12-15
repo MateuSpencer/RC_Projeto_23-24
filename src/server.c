@@ -81,17 +81,17 @@ int newBid(int AID, int newBidValue);
 int isDirectoryEmpty(const char* path);
 int fileExists(const char* filePath);
 
-void handleLoginRequest(char* request, char* response, int verbose);
-void handleOpenAuctionRequest(char* request, char* response, int verbose);
-void handleCloseAuctionRequest(char* request, char* response, int verbose);
-void handleMyAuctionsRequest(char* request, char* response, int verbose);
-void handleMyBidsRequest(char* request, char* response, int verbose);
-void handleListAuctionsRequest(char* response, int verbose);
-void handleShowAssetRequest(char* request, char* response, int verbose);
-void handleBidRequest(char* request, char* response, int verbose);
-void handleShowRecordRequest(char* request, char* response, int verbose);
-void handleLogoutRequest(char* request, char* response, int verbose);
-void handleUnregisterRequest(char* request, char* response, int verbose);
+void handleLoginRequest(char* request, char* response);
+void handleOpenAuctionRequest(char* request, char* response);
+void handleCloseAuctionRequest(char* request, char* response);
+void handleMyAuctionsRequest(char* request, char* response);
+void handleMyBidsRequest(char* request, char* response);
+void handleListAuctionsRequest(char* response);
+void handleShowAssetRequest(char* request, char* response);
+void handleBidRequest(char* request, char* response);
+void handleShowRecordRequest(char* request, char* response);
+void handleLogoutRequest(char* request, char* response);
+void handleUnregisterRequest(char* request, char* response);
 
 volatile sig_atomic_t terminationRequested = 0;
 
@@ -284,19 +284,19 @@ int handleUDPRequests(char* ASport, int verbose) {
             char* data = strtok(NULL, "\n");
             // Handle the action
             if (strcmp(action, "LIN") == 0) {
-                handleLoginRequest(data, responseUDPbuffer, verbose);
+                handleLoginRequest(data, responseUDPbuffer);
             } else if (strcmp(action, "LMA") == 0) {
-                handleMyAuctionsRequest(data, responseUDPbuffer, verbose);
+                handleMyAuctionsRequest(data, responseUDPbuffer);
             } else if (strcmp(action, "LMB") == 0) {
-                handleMyBidsRequest(data, responseUDPbuffer, verbose);
+                handleMyBidsRequest(data, responseUDPbuffer);
             } else if (strcmp(action, "LST\n") == 0) {
-                handleListAuctionsRequest(responseUDPbuffer, verbose);
+                handleListAuctionsRequest(responseUDPbuffer);
             } else if (strcmp(action, "SRC") == 0) {
-                handleShowRecordRequest(data, responseUDPbuffer, verbose);
+                handleShowRecordRequest(data, responseUDPbuffer);
             } else if (strcmp(action, "LOU") == 0) {
-                handleLogoutRequest(data, responseUDPbuffer, verbose);
+                handleLogoutRequest(data, responseUDPbuffer);
             } else if (strcmp(action, "UNR") == 0) {
-                handleUnregisterRequest(data, responseUDPbuffer, verbose);
+                handleUnregisterRequest(data, responseUDPbuffer);
             } else {
                 // If the action is unknown, send an error response
                 sprintf(responseUDPbuffer, "ERR\n"); 
@@ -442,15 +442,15 @@ int handleTCPRequests(char* ASport, int verbose){
                 char* data = strtok(NULL, "\n");
                 // Handle the action
                 if (strcmp(action, "LIN") == 0) {
-                    handleLoginRequest(data, responseTCPbuffer, verbose);
+                    handleLoginRequest(data, responseTCPbuffer);
                 } else if (strcmp(action, "OPA") == 0) {
-                    handleOpenAuctionRequest(data, responseTCPbuffer, verbose);
+                    handleOpenAuctionRequest(data, responseTCPbuffer);
                 } else if (strcmp(action, "CLS") == 0) {
-                    handleCloseAuctionRequest(data, responseTCPbuffer, verbose);
+                    handleCloseAuctionRequest(data, responseTCPbuffer);
                 } else if (strcmp(action, "SAS") == 0) {
-                    handleShowAssetRequest(data, responseTCPbuffer, verbose);
+                    handleShowAssetRequest(data, responseTCPbuffer);
                 } else if (strcmp(action, "BID") == 0) {
-                    handleBidRequest(data, responseTCPbuffer, verbose);
+                    handleBidRequest(data, responseTCPbuffer);
                 } else {
                     // If the action is unknown, send an error response
                     sprintf(responseTCPbuffer, "ERR\n"); 
@@ -742,14 +742,10 @@ int fileExists(const char* filePath) {
 
 /* --------------------- HANDLER FUNCTIONS  -----------------------------------*/
 
-void handleLoginRequest(char* request, char* response, int verbose) { //TODO:Could have better logic, but it works
+void handleLoginRequest(char* request, char* response) { //TODO:Could have better logic, but it works
     char userDir[50];
     char filename[50];
     char filePath[100];
-
-    if (verbose) {
-        printf("Request received: %s\n", request);
-    }
 
     char* UID = strtok(request, " ");
     char* password = strtok(NULL, " ");
@@ -847,11 +843,7 @@ void handleLoginRequest(char* request, char* response, int verbose) { //TODO:Cou
 }
 
 //TODO: como e quando encerrar o leilao com limite de tempo? -> requests que o tentem aceder
-void handleOpenAuctionRequest(char *request, char *response, int verbose) {
-    if (verbose) {
-        printf("Request received: %s\n", request);
-    }
-
+void handleOpenAuctionRequest(char *request, char *response) {
     char *UID = strtok(request, " ");
     char *password = strtok(NULL, " ");
     char *name = strtok(NULL, " ");
@@ -935,10 +927,7 @@ void handleOpenAuctionRequest(char *request, char *response, int verbose) {
     }
 }
 
-void handleCloseAuctionRequest(char* request, char* response, int verbose) {
-    if (verbose) {
-        printf("Request received: %s\n", request);
-    }
+void handleCloseAuctionRequest(char* request, char* response) {
 
     char* UID = strtok(request, " ");
     char* password = strtok(NULL, " ");
@@ -986,13 +975,9 @@ void handleCloseAuctionRequest(char* request, char* response, int verbose) {
     }
 }
 
-void handleMyAuctionsRequest(char* request, char* response, int verbose) {//TODO: resposta mal formatada, maybe overwritte da segunda parte
+void handleMyAuctionsRequest(char* request, char* response) {//TODO: resposta mal formatada, maybe overwritte da segunda parte
     char auctionString[10];
     int auctionCount = 0;
-
-    if (verbose) {
-        printf("Request received: %s\n", request);
-    }
 
     char* UID = strtok(request, " ");
 
@@ -1051,13 +1036,9 @@ void handleMyAuctionsRequest(char* request, char* response, int verbose) {//TODO
     }
 }
 
-void handleMyBidsRequest(char* request, char* response, int verbose) { //TODO: Diferent lkogic than other functions thatdo similar things...
+void handleMyBidsRequest(char* request, char* response) { //TODO: Diferent lkogic than other functions thatdo similar things...
     char bidString[10];
     int bidCount = 0;
-
-    if (verbose) {
-        printf("Request received: %s\n", request);
-    }
 
     char* UID = strtok(request, " ");
 
@@ -1115,13 +1096,9 @@ void handleMyBidsRequest(char* request, char* response, int verbose) { //TODO: D
     }
 }
 
-void handleListAuctionsRequest(char* response, int verbose) {
+void handleListAuctionsRequest(char* response) {
     char auctionString[10];
     int auctionCount = 0;
-
-    if (verbose) {
-        printf("Request received: LST\n");
-    }
 
     // Initialize response with "LST OK"
     snprintf(response, MAX_BUFFER_SIZE, "LST OK");
@@ -1156,11 +1133,7 @@ void handleListAuctionsRequest(char* response, int verbose) {
     }
 }
 
-void handleShowAssetRequest(char* request, char* response, int verbose) {
-    if (verbose) {
-        printf("Request received: %s\n", request);
-    }
-
+void handleShowAssetRequest(char* request, char* response) {
     char* AID_str = strtok(request, " ");
     int AID = atoi(AID_str);
 
@@ -1214,10 +1187,7 @@ void handleShowAssetRequest(char* request, char* response, int verbose) {
 
 //TODO falta checkar o minimum starting bid, maybe no new bid
 //TODO: falta ver se o tempo de final ja chegou, se sim é criar o ficheiro END e nao aceitar a bid (no close auction por a parte de criar o ficehiro END e escrever numa função)
-void handleBidRequest(char* request, char* response, int verbose) {
-    if (verbose) {
-        printf("Request received: %s\n", request);
-    }
+void handleBidRequest(char* request, char* response) {
 
     char* UID = strtok(request, " ");
     char* password = strtok(NULL, " ");
@@ -1274,11 +1244,7 @@ void handleBidRequest(char* request, char* response, int verbose) {
     }
 }
 
-void handleShowRecordRequest(char* request, char* response, int verbose) { //TODO: not very well chcked came from chatGPT, não sei como vai funcionar mandar a a mensagems e o protocolo tem \n e é suposto acabar em \n
-    if (verbose) {
-        printf("Request received: %s\n", request);
-    }
-    
+void handleShowRecordRequest(char* request, char* response) { //TODO: not very well chcked came from chatGPT, não sei como vai funcionar mandar a a mensagems e o protocolo tem \n e é suposto acabar em \n
     char* AID_str = strtok(request, " ");
     int AID = atoi(AID_str);
 
@@ -1355,7 +1321,7 @@ void handleShowRecordRequest(char* request, char* response, int verbose) { //TOD
     }
 }
 
-void handleLogoutRequest(char* request, char* response, int verbose) {
+void handleLogoutRequest(char* request, char* response) {
     char* UID = strtok(request, " ");
     char* password = strtok(NULL, " ");
 
@@ -1397,10 +1363,7 @@ void handleLogoutRequest(char* request, char* response, int verbose) {
     }
 }
 
-void handleUnregisterRequest(char* request, char* response, int verbose) {
-    if (verbose) {
-        printf("Request received: %s\n", request);
-    }
+void handleUnregisterRequest(char* request, char* response) {
     char* UID = strtok(request, " ");
     char* password = strtok(NULL, " ");
 
