@@ -964,7 +964,8 @@ void handleMyAuctionsRequest(char* request, char* response, int verbose) {//TODO
     if (hostedDirPtr != NULL) {
         // Loop through the HOSTED directory
         while ((entry = readdir(hostedDirPtr)) != NULL) {
-            if (entry->d_type == DT_DIR && strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
+            //TODO: ver se isto é preciso no if: entry->d_type == DT_DIR && 
+            if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
                 char* AID = entry->d_name;
                 // Check if the auction has ended
                 char state = hasAuctionEnded(atoi(AID)) ? '0' : '1'; //TODO: REMOVE?  (myauctions, mybids, list) vêm tanto auctions ativos como inativos
@@ -1377,3 +1378,4 @@ void handleUnregisterRequest(char* request, char* response, int verbose) {
         strcpy(response, "RUR NOK\n");
     }
 }
+
