@@ -29,7 +29,7 @@
 
 #define MAX_REQUEST_UDP_BUFFER_SIZE 21 //LIN / LOU
 #define MIN_REQUEST_UDP_BUFFER_SIZE 4 //LST
-#define MAX_RESPONSE_UDP_BUFFER_SIZE 4000 //TODO: what size limit?
+#define MAX_RESPONSE_UDP_BUFFER_SIZE 6000 //TODO: what size limit?
 
 #define MAX_REQUEST_TCP_BUFFER_SIZE 4000 //TODO: what size limit?
 #define MIN_REQUEST_TCP_BUFFER_SIZE 4000 ///TODO: what size limit?
@@ -69,13 +69,15 @@ int writeFile(const char *filePath, const char *content);
 int removeFile(const char *filePath);
 void getCurrentDateTime(char* dateTime);
 
+bool LoggedIn(const char* UID);
 int validateUser(const char* UID, const char* password);
+int isNumericAndLengthSix(const char *str);
+int validateUserCredentialsFormating(char* UID, char* password);
 int newAIDdirectory();
 bool auctionExists(int AID);
 bool auctionOwnedByUser(int AID, const char* UID);
 bool auctionAlreadyEnded(int AID);
 int newBid(int AID, int newBidValue);
-int validateUserLoggedIn(const char* UID);
 int isDirectoryEmpty(const char* path);
 int fileExists(const char* filePath);
 
@@ -544,6 +546,19 @@ void getCurrentDateTime(char* dateTime) {
     strftime(dateTime, 20, "%Y-%m-%d %H:%M:%S", tmp);
 }
 /* --------------------- HELPER FUNCTIONS  -----------------------------------*/
+
+// Helper function to check if the user is logged in
+bool LoggedIn(const char* UID) {
+    char loginFile[50];
+    snprintf(loginFile, sizeof(loginFile), "AS/USERS/%s/%s_login.txt", UID, UID);
+    // Check if the login file exists
+    if (access(loginFile, F_OK) != -1) {
+        return true;  // User is logged in
+    } else {
+        return false;  // User is not logged in
+    }
+}
+
 // Helper function to validate user existence and password
 int validateUser(const char* UID, const char* password) {
     char userDir[50];
@@ -577,6 +592,22 @@ int validateUser(const char* UID, const char* password) {
     }
 
     return -1; // Unexpected error
+}
+
+int isNumericAndLengthSix(const char *str) {
+    // Check if all characters are digits
+    for (int i = 0; str[i] != '\0'; i++) {
+        if (!isdigit(str[i])) {
+            return 0;  // Not a digit
+        }
+    }
+
+    // Check if the length is 6
+    return (strlen(str) == 6);
+}
+
+int validateUserCredentialsFormating(char* UID, char* password) {
+    return isNumericAndLengthSix(UID) && strlen(password) == 8;
 }
 
 // Helper function to find the highest AID in the AUCTIONS directory and create a new directory for the next AID
@@ -679,19 +710,6 @@ int newBid(int AID, int newBidValue) {
     }
 }
 
-// Helper function to validate if the user is logged in
-int validateUserLoggedIn(const char* UID) {
-    char loginFile[50];
-    snprintf(loginFile, sizeof(loginFile), "AS/USERS/%s/%s_login.txt", UID, UID);
-
-    // Check if the login file exists
-    if (access(loginFile, F_OK) != -1) {
-        return 1;  // User is logged in
-    } else {
-        return 0;  // User is not logged in
-    }
-}
-
 // Helper function to check if a directory is empty
 int isDirectoryEmpty(const char* path) {
     DIR* dir = opendir(path);
@@ -722,21 +740,9 @@ int fileExists(const char* filePath) {
     return 0;  // File does not exist
 }
 
-int isNumericAndLengthSix(const char *str) {
-    // Check if all characters are digits
-    for (int i = 0; str[i] != '\0'; i++) {
-        if (!isdigit(str[i])) {
-            return 0;  // Not a digit
-        }
-    }
-
-    // Check if the length is 6
-    return (strlen(str) == 6);
-}
-
 /* --------------------- HANDLER FUNCTIONS  -----------------------------------*/
 
-void handleLoginRequest(char* request, char* response, int verbose) {
+void handleLoginRequest(char* request, char* response, int verbose) { //TODO:Could have better logic, but it works
     char userDir[50];
     char filename[50];
     char filePath[100];
@@ -747,45 +753,40 @@ void handleLoginRequest(char* request, char* response, int verbose) {
 
     char* UID = strtok(request, " ");
     char* password = strtok(NULL, " ");
-    printf("UID: %s\n",UID);
-    printf("Pass: %s\n", password);
 
-    if(!isNumericAndLengthSix(UID) || strlen(password)!=8){
-        snprintf(response, MAX_BUFFER_SIZE, "ERR\n");
+    if(validateUserCredentialsFormating(UID, password) == 1){
+        snprintf(response, MAX_BUFFER_SIZE, "NOK\n");
         return;
     }
-
     // Validate user existence and password
-    int validation = validateUser(UID, password);//TODO: check if user is already logged in first?
+    int validation = validateUser(UID, password);
 
     if (validation == VALID_USER || validation == MISSING_PASSWORD) {
-        // User is already registered and password is correct, log in
-        // Construct user directory path
+        // User Exists
         snprintf(userDir, sizeof(userDir), "AS/USERS/%s", UID);
-        // Create login file
         snprintf(filename, sizeof(filename), "%s_login.txt", UID);
         
         if(createFile(userDir, filename) == -1){
-            snprintf(response, MAX_BUFFER_SIZE, "ERR\n");
+            snprintf(response, MAX_BUFFER_SIZE, "NOK\n");
             return;
         }
         
-        if(validation == MISSING_PASSWORD){//if user was registered but had no password, assign new password
+        if(validation == MISSING_PASSWORD){
+            //if user was registered but had no password, assign new password
             snprintf(filename, sizeof(filename), "%s_pass.txt", UID);
             if(createFile(userDir, filename) == -1){
-                snprintf(response, MAX_BUFFER_SIZE, "ERR\n");
+                snprintf(response, MAX_BUFFER_SIZE, "NOK\n");
                 return;
             }
             snprintf(filePath, sizeof(filePath), "%s/%s", userDir, filename);
             if(writeFile(filePath, password) == -1){
-                snprintf(response, MAX_BUFFER_SIZE, "ERR\n");
+                snprintf(response, MAX_BUFFER_SIZE, "NOK\n");
                 return;
             }
             
         }
 
         snprintf(response, MAX_BUFFER_SIZE, "RLI OK\n");
-
         return;
     } else if (validation == USER_NOT_EXIST) {
         // User is not registered, register and log in the user
@@ -794,20 +795,20 @@ void handleLoginRequest(char* request, char* response, int verbose) {
         snprintf(userDir, sizeof(userDir), "AS/USERS/%s", UID);
         // Create user directory
         if(createDirectory(userDir) == -1){
-            snprintf(response, MAX_BUFFER_SIZE, "ERR\n");
+            snprintf(response, MAX_BUFFER_SIZE, "NOK\n");
             return;
         }
 
         // Create password file
         snprintf(filename, sizeof(filename), "%s_pass.txt", UID);
         if(createFile(userDir, filename) == -1){
-            snprintf(response, MAX_BUFFER_SIZE, "ERR\n");
+            snprintf(response, MAX_BUFFER_SIZE, "NOK\n");
             return;
         }
         // Create login file
         snprintf(filename, sizeof(filename), "%s_login.txt", UID);
         if(createFile(userDir, filename) == -1){
-            snprintf(response, MAX_BUFFER_SIZE, "ERR\n");
+            snprintf(response, MAX_BUFFER_SIZE, "NOK\n");
             return;
         }
         
@@ -815,7 +816,7 @@ void handleLoginRequest(char* request, char* response, int verbose) {
         snprintf(filename, sizeof(filename), "%s_pass.txt", UID);
         snprintf(filePath, sizeof(filePath), "%s/%s", userDir, filename);
         if(writeFile(filePath, password) == -1){
-            snprintf(response, MAX_BUFFER_SIZE, "ERR\n");
+            snprintf(response, MAX_BUFFER_SIZE, "NOK\n");
             return;
         }
         
@@ -823,12 +824,12 @@ void handleLoginRequest(char* request, char* response, int verbose) {
         char userDirCopy[50];
         strcpy(userDirCopy, userDir);
         if(createDirectory(strcat(userDir, "/HOSTED")) == -1){
-            snprintf(response, MAX_BUFFER_SIZE, "ERR\n");
+            snprintf(response, MAX_BUFFER_SIZE, "NOK\n");
             return;
         }
 
         if(createDirectory(strcat(userDirCopy, "/BIDDED")) == -1){
-            snprintf(response, MAX_BUFFER_SIZE, "ERR\n");
+            snprintf(response, MAX_BUFFER_SIZE, "NOK\n");
             return;
         }
 
@@ -1056,9 +1057,7 @@ void handleMyBidsRequest(char* request, char* response, int verbose) { //TODO: D
 
     char* UID = strtok(request, " ");
 
-    int loggedIn = validateUserLoggedIn(UID);
-
-    if (loggedIn) {
+    if (LoggedIn(UID)) {
         // Initialize response with "RMA OK"
         snprintf(response, MAX_BUFFER_SIZE, "RMB OK");
 

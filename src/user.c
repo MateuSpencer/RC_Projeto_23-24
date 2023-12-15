@@ -15,7 +15,7 @@
 
 #define MAX_REQUEST_UDP_BUFFER_SIZE 21 //LIN / LOU
 #define MIN_REQUEST_UDP_BUFFER_SIZE 4 //LST
-#define MAX_RESPONSE_UDP_BUFFER_SIZE 4000 //TODO: what size limit?
+#define MAX_RESPONSE_UDP_BUFFER_SIZE 6000 //TODO: what size limit?
 
 #define MAX_REQUEST_TCP_BUFFER_SIZE 4000 //TODO: what size limit?
 #define MIN_REQUEST_TCP_BUFFER_SIZE 4000 ///TODO: what size limit?
