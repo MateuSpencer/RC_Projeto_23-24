@@ -143,7 +143,7 @@ int main(int argc, char *argv[]) {
 
         } else if (strcmp(token, "logout") == 0){
             if(presentLoginCredentials == 0){
-                printf("Please Login First\n");
+                printf("Please Login First.\nIf not able, use CTRL+C or CTRL+Z\n");
             } else {
                 presentLoginCredentials = logout(UID, password, ASIP, ASport);
                 if(presentLoginCredentials == 0){
