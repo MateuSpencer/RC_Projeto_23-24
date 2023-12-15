@@ -67,7 +67,6 @@ bool auctionAlreadyEnded(int AID);
 int newBid(int AID, int newBidValue);
 int validateUserLoggedIn(const char* UID);
 int isDirectoryEmpty(const char* path);
-int hasAuctionEnded(int AID);
 int fileExists(const char* filePath);
 
 void handleLoginRequest(char* request, char* response, int verbose);
@@ -599,7 +598,7 @@ int newAIDdirectory() {
 // Helper function to check if an auction with the given AID exists
 bool auctionExists(int AID) {
     char auctionDir[50];
-    snprintf(auctionDir, sizeof(auctionDir), "AS/AUCTIONS/%d", AID);
+    snprintf(auctionDir, sizeof(auctionDir), "AS/AUCTIONS/%03d", AID);
 
     struct stat st;
     return stat(auctionDir, &st) == 0 && S_ISDIR(st.st_mode);
@@ -611,24 +610,18 @@ bool auctionOwnedByUser(int AID, const char* UID) {
     snprintf(hostedDir, sizeof(hostedDir), "AS/USERS/%s/HOSTED", UID);
 
     char auctionFile[100];
-    snprintf(auctionFile, sizeof(auctionFile), "%s/%d.txt", hostedDir, AID);
+    snprintf(auctionFile, sizeof(auctionFile), "%s/%03d.txt", hostedDir, AID);
 
     return access(auctionFile, F_OK) != -1;
 }
 
-// Helper function to check if an auction with the given AID has already ended
-bool auctionAlreadyEnded(int AID) {
-    char endFile[100];
-    snprintf(endFile, sizeof(endFile), "AS/AUCTIONS/%d/END.txt", AID);
 
-    return access(endFile, F_OK) != -1;
-}
 
 
 // Helper function to create a new bid if possible
 int newBid(int AID, int newBidValue) {
     char bidsDir[50];
-    snprintf(bidsDir, sizeof(bidsDir), "AS/AUCTIONS/%d/BIDS", AID);
+    snprintf(bidsDir, sizeof(bidsDir), "AS/AUCTIONS/%03d/BIDS", AID);
 
     DIR* dir = opendir(bidsDir);
     struct dirent* entry;
@@ -649,7 +642,7 @@ int newBid(int AID, int newBidValue) {
         if (newBidValue > highestBid) {
             // Create a new entry for the bid
             char bidFilePath[50];
-            snprintf(bidFilePath, sizeof(bidFilePath), "AS/AUCTIONS/%d/BIDS", AID);
+            snprintf(bidFilePath, sizeof(bidFilePath), "AS/AUCTIONS/%03d/BIDS", AID);
             char bidFilename[50];
             snprintf(bidFilename, sizeof(bidFilename), "%06d.txt", newBidValue);
             return createFile(bidFilePath, bidFilename);
@@ -688,11 +681,12 @@ int isDirectoryEmpty(const char* path) {
     return -1;  // Error opening directory
 }
 
-// Helper function to check if an auction has ended (based on the presence of END.txt file)
-int hasAuctionEnded(int AID) {
-    char endFilePath[100];
-    snprintf(endFilePath, sizeof(endFilePath), "AS/AUCTIONS/%d/END.txt", AID);
-    return access(endFilePath, F_OK) != -1;
+// Helper function to check if an auction with the given AID has already ended
+bool auctionAlreadyEnded(int AID) {
+    char endFile[100];
+    snprintf(endFile, sizeof(endFile), "AS/AUCTIONS/%03d/END.txt", AID);
+
+    return access(endFile, F_OK) != -1;
 }
 
 // Helper function to check if a file exists
@@ -936,7 +930,7 @@ void handleCloseAuctionRequest(char* request, char* response, int verbose) {
                 if (!auctionAlreadyEnded(AID)) {
                     // Close the auction by creating the END file
                     char endFilePath[100];
-                    snprintf(endFilePath, sizeof(endFilePath), "AS/AUCTIONS/%s", AID_str);
+                    snprintf(endFilePath, sizeof(endFilePath), "AS/AUCTIONS/%03d", AID);
                     if(createFile(endFilePath, "END.txt") == -1){
                         snprintf(response, MAX_BUFFER_SIZE, "ERR\n");
                         return;
@@ -988,7 +982,7 @@ void handleMyAuctionsRequest(char* request, char* response, int verbose) {//TODO
             if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
                 char* AID = entry->d_name;
                 // Check if the auction has ended
-                char state = hasAuctionEnded(atoi(AID)) ? '0' : '1'; //TODO: REMOVE?  (myauctions, mybids, list) vêm tanto auctions ativos como inativos
+                char state = auctionAlreadyEnded(atoi(AID)) ? '0' : '1'; //TODO: REMOVE?  (myauctions, mybids, list) vêm tanto auctions ativos como inativos
                 // Append AID and state to the string
                 snprintf(auctionString, sizeof(auctionString), " %s %c", AID, state);
                 strncat(response, auctionString, MAX_BUFFER_SIZE - strlen(response) - 1);
@@ -1007,7 +1001,7 @@ void handleMyAuctionsRequest(char* request, char* response, int verbose) {//TODO
             if (entry->d_type == DT_DIR && strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
                 char* AID = entry->d_name;
                 // Check if the auction has ended
-                char state = hasAuctionEnded(atoi(AID)) ? '0' : '1'; //TODO: REMOVE?  (myauctions, mybids, list) vêm tanto auctions ativos como inativos
+                char state = auctionAlreadyEnded(atoi(AID)) ? '0' : '1'; //TODO: REMOVE?  (myauctions, mybids, list) vêm tanto auctions ativos como inativos
                 // Append AID and state to the string
                 snprintf(auctionString, sizeof(auctionString), " %s %c", AID, state);
                 strncat(response, auctionString, MAX_BUFFER_SIZE - strlen(response) - 1);
@@ -1062,7 +1056,7 @@ void handleMyBidsRequest(char* request, char* response, int verbose) { //TODO: D
                     if (entry->d_type == DT_REG) {  // Regular file (assuming each entry is a file)
                         char* AID = entry->d_name;
                         // Check if the auction has ended
-                        char state = hasAuctionEnded(atoi(AID)) ? '0' : '1';//TODO: REMOVE?  (myauctions, mybids, list) vêm tanto auctions ativos como inativos
+                        char state = auctionAlreadyEnded(atoi(AID)) ? '0' : '1';//TODO: REMOVE?  (myauctions, mybids, list) vêm tanto auctions ativos como inativos
 
                         // Append AID and state to the response string
                         snprintf(bidString, sizeof(bidString), " %s %c", AID, state);
@@ -1114,7 +1108,7 @@ void handleListAuctionsRequest(char* response, int verbose) {
             if (entry->d_type == DT_DIR && strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
                 char* AID = entry->d_name;
                 // Check if the auction has ended
-                char state = hasAuctionEnded(atoi(AID)) ? '0' : '1'; //TODO: REMOVE?  (myauctions, mybids, list) vêm tanto auctions ativos como inativos
+                char state = auctionAlreadyEnded(atoi(AID)) ? '0' : '1'; //TODO: REMOVE?  (myauctions, mybids, list) vêm tanto auctions ativos como inativos
                 // Append AID and state to the string
                 snprintf(auctionString, sizeof(auctionString), " %s %c", AID, state);
                 strncat(response, auctionString, MAX_BUFFER_SIZE - strlen(response) - 1);
@@ -1143,7 +1137,7 @@ void handleShowAssetRequest(char* request, char* response, int verbose) {
     int AID = atoi(AID_str);
 
     char auctionDir[50];
-    snprintf(auctionDir, sizeof(auctionDir), "AS/AUCTIONS/%d", AID);
+    snprintf(auctionDir, sizeof(auctionDir), "AS/AUCTIONS/%03d", AID);
 
     char startFilePath[100];
     snprintf(startFilePath, sizeof(startFilePath), "%s/START.txt", auctionDir);
@@ -1221,7 +1215,7 @@ void handleBidRequest(char* request, char* response, int verbose) {//TODO falta 
                     char bidDir[50];
                     snprintf(bidDir, sizeof(bidDir), "AS/USERS/%s/BIDDED", UID);
                     char bidFilename[50];
-                    snprintf(bidFilename, sizeof(bidFilename), "%s.txt", AID_str);
+                    snprintf(bidFilename, sizeof(bidFilename), "%03d.txt", AID);
                     createFile(bidDir, bidFilename);
                     strcpy(response, "RBD ACC\n");
                     return;
@@ -1259,7 +1253,7 @@ void handleShowRecordRequest(char* request, char* response, int verbose) { //TOD
     int AID = atoi(AID_str);
 
     char auctionDir[50];
-    snprintf(auctionDir, sizeof(auctionDir), "AS/AUCTIONS/%d", AID);
+    snprintf(auctionDir, sizeof(auctionDir), "AS/AUCTIONS/%03d", AID);
     
     char startFilePath[100];
     snprintf(startFilePath, sizeof(startFilePath), "%s/START.txt", auctionDir);
