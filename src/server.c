@@ -31,6 +31,8 @@
 #define MAX_FSIZE_LEN 8
 #define MAX_FSIZE_NUM 0xA00000 // 10 MB
 
+//TODO: autions têm de ser em 001 e não 1
+
 int createUDPSocket() {
     int udpSocket = socket(AF_INET, SOCK_DGRAM, 0);
     if (udpSocket == -1) {
@@ -773,11 +775,14 @@ void handleLoginRequest(char* request, char* response, int verbose) {
         }
         
         // Create HOSTED and BIDDED directories
+        char userDirCopy[50];
+        strcpy(userDirCopy, userDir);
         if(createDirectory(strcat(userDir, "/HOSTED")) == -1){
             snprintf(response, MAX_BUFFER_SIZE, "ERR\n");
             return;
         }
-        if(createDirectory(strcat(userDir, "/BIDDED")) == -1){
+
+        if(createDirectory(strcat(userDirCopy, "/BIDDED")) == -1){
             snprintf(response, MAX_BUFFER_SIZE, "ERR\n");
             return;
         }
@@ -1176,6 +1181,13 @@ void handleBidRequest(char* request, char* response, int verbose) {//TODO falta 
 
                 if (result == 0) {
                     // Bid accepted
+                    // Writes bid in user BIDDED directory
+                    //TODO: checkar o valor do createFile
+                    char bidDir[50];
+                    snprintf(bidDir, sizeof(bidDir), "AS/USERS/%s/BIDDED", UID);
+                    char bidFilename[50];
+                    snprintf(bidFilename, sizeof(bidFilename), "%s.txt", AID_str);
+                    createFile(bidDir, bidFilename);
                     strcpy(response, "RBD ACC\n");
                     return;
                 } else if (result == -2) {
