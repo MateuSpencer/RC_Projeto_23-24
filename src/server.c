@@ -31,8 +31,6 @@
 #define MAX_FSIZE_LEN 8
 #define MAX_FSIZE_NUM 0xA00000 // 10 MB
 
-//TODO: autions têm de ser em 001 e não 1
-
 int createUDPSocket() {
     int udpSocket = socket(AF_INET, SOCK_DGRAM, 0);
     if (udpSocket == -1) {
@@ -50,7 +48,6 @@ int createTCPSocket() {
     }
     return tcpSocket;
 }
-
 
 int handleUDPRequests(char* ASport, int verbose);
 int handleTCPRequests(char* ASport, int verbose);
@@ -148,6 +145,8 @@ int main(int argc, char *argv[]) {
     }
 
     printf("To Terminate use CTRL+C or CTRL+Z\n");
+
+    //TODO: Confirmar que pastas certas estão criadas? senão criar?
     
     // Fork a new process
     pid_t pid = fork();
@@ -314,7 +313,7 @@ int handleTCPRequests(char* ASport, int verbose){
         return -1;
     }
 
-    // Set the SO_REUSEADDR option
+    // TODO: check if this is needed Set the SO_REUSEADDR option
     int yes = 1;
     if (setsockopt(tcpSocket, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1) {
         perror("setsockopt");
@@ -572,11 +571,19 @@ int newAIDdirectory() {
             }
         }
 
-        // Create the directory for the next AID
+        // Check if the next AID would be too large
         int nextAID = highestAID + 1;
+        if (nextAID > 999) {
+            fprintf(stderr, "Error: reached limit of 999 auctions\n");
+            closedir(dir);
+            return -1;
+        }
+
+        // Create the directory for the next AID
         char auctionDir[50];
-        snprintf(auctionDir, sizeof(auctionDir), "AS/AUCTIONS/%d", nextAID);
+        snprintf(auctionDir, sizeof(auctionDir), "AS/AUCTIONS/%03d", nextAID);
         if(createDirectory(auctionDir) == -1){
+            closedir(dir);
             return -1;
         }
         closedir(dir);

@@ -72,7 +72,6 @@ int main(int argc, char *argv[]) {
             i++;
         }
     }
-    //TODO: Confirmar que pastas certas estão criadas?
 
     // Application loop
     while (1) {
