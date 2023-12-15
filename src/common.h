@@ -17,9 +17,8 @@
 #define MIN_REQUEST_UDP_BUFFER_SIZE 4 //LST
 #define MAX_RESPONSE_UDP_BUFFER_SIZE 6000 //TODO: what size limit?
 
-#define MAX_REQUEST_TCP_BUFFER_SIZE 4000 //TODO: what size limit?
-#define MIN_REQUEST_TCP_BUFFER_SIZE 4000 ///TODO: what size limit?
-#define MAX_RESPONSE_TCP_BUFFER_SIZE 4000 //TODO: what size limit?
+#define MAX_REQUEST_TCP_BUFFER_SIZE 4000 //TODO: what size limit? should be enough for the biggest file size allowed and the message - 10 MB+?
+#define MAX_RESPONSE_TCP_BUFFER_SIZE 4000 //TODO: what size limit? should be enough for the biggest file size allowed and the message - 10 MB+?
 
 #define UID_SIZE 6
 #define PASSWORD_SIZE 8

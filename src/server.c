@@ -31,9 +31,8 @@
 #define MIN_REQUEST_UDP_BUFFER_SIZE 4 //LST
 #define MAX_RESPONSE_UDP_BUFFER_SIZE 6000 //TODO: what size limit?
 
-#define MAX_REQUEST_TCP_BUFFER_SIZE 4000 //TODO: what size limit?
-#define MIN_REQUEST_TCP_BUFFER_SIZE 4000 ///TODO: what size limit?
-#define MAX_RESPONSE_TCP_BUFFER_SIZE 4000 //TODO: what size limit?
+#define MAX_REQUEST_TCP_BUFFER_SIZE 4000 //TODO: what size limit? should be enough for the biggest file size allowed and the message - 10 MB+?
+#define MAX_RESPONSE_TCP_BUFFER_SIZE 4000 //TODO: what size limit? should be enough for the biggest file size allowed and the message - 10 MB+?
 
 #define UID_SIZE 6
 #define PASSWORD_SIZE 8
@@ -182,10 +181,10 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     } else if (pid != 0) {
         // Parent process
-        handleUDPRequests(ASport, verbose);
+        handleTCPRequests(ASport, verbose);
     } else {
         // Child process
-        if(handleTCPRequests(ASport, verbose) == -1){
+        if(handleUDPRequests(ASport, verbose) == -1){
             exit(EXIT_FAILURE);
         }
         exit(EXIT_SUCCESS);
@@ -416,12 +415,13 @@ int handleTCPRequests(char* ASport, int verbose){
             continue;
         } else if (tcpPid != 0) {
             // Parent process
+
             // Close the listening socket
             close(tcpSocket);
             // Read data from the client
             size_t alreadyRead = 0;
             ssize_t n;
-            while (alreadyRead < MAX_BUFFER_SIZE && (n = read(sessionFd, requestTCPbuffer + alreadyRead, sizeof(char))) > 0) {
+            while (alreadyRead < MAX_REQUEST_TCP_BUFFER_SIZE && (n = read(sessionFd, requestTCPbuffer + alreadyRead, sizeof(char))) > 0) {
                 alreadyRead += (size_t)n;
                 if (requestTCPbuffer[alreadyRead - 1] == '\n') {
                     break;
@@ -433,7 +433,7 @@ int handleTCPRequests(char* ASport, int verbose){
             if(verbose == 1){
                 printf("[TCP] Received: %s\n", requestTCPbuffer);//TODO: a short description of the received requests (UID, type of request) and the IP and port originating those requests.
             }
-            if (requestTCPbuffer[alreadyRead - 1] != '\n' || strlen(requestTCPbuffer) <= MAX_REQUEST_TCP_BUFFER_SIZE) {
+            if (requestTCPbuffer[alreadyRead - 1] != '\n') {
                 // If the last character is not a newline or if the request is smaller than the minimum, send an error response
                 sprintf(responseTCPbuffer, "ERR\n"); 
             } else {
@@ -461,7 +461,7 @@ int handleTCPRequests(char* ASport, int verbose){
             size_t toWrite = strlen(responseTCPbuffer);
             size_t written = 0;
             while (written < toWrite) {
-                ssize_t sent = write(sessionFd, responseTCPbuffer + written, MIN(MAX_BUFFER_SIZE, toWrite - written));
+                ssize_t sent = write(sessionFd, responseTCPbuffer + written, MIN(MAX_RESPONSE_TCP_BUFFER_SIZE, toWrite - written));
                 if (sent <= 0) {
                     // If write fails, print error and break the loop
                     perror("Failed to write to to TCP Socket");
@@ -535,6 +535,53 @@ int removeFile(const char *filePath) {
     return 0;
 }
 
+int delete_directory(const char *path) {
+    DIR *dir;
+    struct dirent *entry;
+    char full_path[PATH_MAX];
+
+    // Open the directory
+    if ((dir = opendir(path)) == NULL) {
+        perror("opendir");
+        return -1;
+    }
+
+    // Traverse the directory
+    while ((entry = readdir(dir)) != NULL) {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+            continue; // Skip "." and ".." entries
+        }
+
+        snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
+
+        if (entry->d_type == DT_DIR) {
+            // Recursive call to delete subdirectory
+            if (delete_directory(full_path) == -1) {
+                closedir(dir);
+                return -1;
+            }
+        } else {
+            // Delete file
+            if (unlink(full_path) == -1) {
+                perror("unlink");
+                closedir(dir);
+                return -1;
+            }
+        }
+    }
+
+    // Close the directory
+    closedir(dir);
+
+    // Remove the directory itself
+    if (rmdir(path) == -1) {
+        perror("rmdir");
+        return -1;
+    }
+
+    return 0;
+}
+
 // Function to get the current date and time in the required format
 void getCurrentDateTime(char* dateTime) {
     time_t t;
@@ -577,7 +624,7 @@ int validateUser(const char* UID, const char* password) {
             snprintf(filePath, sizeof(filePath), "%s/%s", userDir, filename);
             FILE* file = fopen(filePath, "r");
             if (file != NULL) {
-                char storedPassword[MAX_BUFFER_SIZE];
+                char storedPassword[PASSWORD_SIZE];
                 fscanf(file, "%s", storedPassword);
                 fclose(file);
                 return (strcmp(storedPassword, password) == 0) ? VALID_USER : INVALID_PASSWORD;
@@ -601,13 +648,17 @@ int isNumericAndLengthSix(const char *str) {
             return 0;  // Not a digit
         }
     }
-
-    // Check if the length is 6
-    return (strlen(str) == 6);
+    if (strlen(str) == 6) {
+        return 1;  // Length is 6
+    }
 }
 
 int validateUserCredentialsFormating(char* UID, char* password) {
-    return isNumericAndLengthSix(UID) && strlen(password) == 8;
+    if (isNumericAndLengthSix(UID) && strlen(password) == 8){
+        return 0;
+    }else {
+        return -1;
+    }
 }
 
 // Helper function to find the highest AID in the AUCTIONS directory and create a new directory for the next AID
@@ -742,7 +793,7 @@ int fileExists(const char* filePath) {
 
 /* --------------------- HANDLER FUNCTIONS  -----------------------------------*/
 
-void handleLoginRequest(char* request, char* response) { //TODO:Could have better logic, but it works
+void handleLoginRequest(char* request, char* response) {
     char userDir[50];
     char filename[50];
     char filePath[100];
@@ -750,99 +801,104 @@ void handleLoginRequest(char* request, char* response) { //TODO:Could have bette
     char* UID = strtok(request, " ");
     char* password = strtok(NULL, " ");
 
-    if(validateUserCredentialsFormating(UID, password) == 1){
-        snprintf(response, MAX_BUFFER_SIZE, "RLI NOK\n");
+    if(validateUserCredentialsFormating(UID, password) == -1){
+        snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "RLI NOK\n");
         return;
     }
-    // Validate user existence and password
-    int validation = validateUser(UID, password);
+    if (LoggedIn(UID)) {
+        //User is already Logged in
+        snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "RLI OK\n");
+        return;
+    }else{
+        // Validate user existence and password
+        int validation = validateUser(UID, password);
 
-    if (validation == VALID_USER || validation == MISSING_PASSWORD) {
-        // User Exists
-        snprintf(userDir, sizeof(userDir), "AS/USERS/%s", UID);
-        snprintf(filename, sizeof(filename), "%s_login.txt", UID);
-        
-        if(createFile(userDir, filename) == -1){
-            snprintf(response, MAX_BUFFER_SIZE, "RLI NOK\n");
-            return;
-        }
-        
-        if(validation == MISSING_PASSWORD){
-            //if user was registered but had no password, assign new password
-            snprintf(filename, sizeof(filename), "%s_pass.txt", UID);
+        if (validation == VALID_USER || validation == MISSING_PASSWORD) {
+            // User Exists
+            snprintf(userDir, sizeof(userDir), "AS/USERS/%s", UID);
+            snprintf(filename, sizeof(filename), "%s_login.txt", UID);
+            
             if(createFile(userDir, filename) == -1){
-                snprintf(response, MAX_BUFFER_SIZE, "RLI NOK\n");
-                return;
-            }
-            snprintf(filePath, sizeof(filePath), "%s/%s", userDir, filename);
-            if(writeFile(filePath, password) == -1){
-                snprintf(response, MAX_BUFFER_SIZE, "RLI NOK\n");
+                snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "RLI NOK\n");
                 return;
             }
             
-        }
+            if(validation == MISSING_PASSWORD){
+                //if user was registered but had no password, assign new password
+                snprintf(filename, sizeof(filename), "%s_pass.txt", UID);
+                if(createFile(userDir, filename) == -1){
+                    snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "RLI NOK\n");
+                    return;
+                }
+                snprintf(filePath, sizeof(filePath), "%s/%s", userDir, filename);
+                if(writeFile(filePath, password) == -1){
+                    snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "RLI NOK\n");
+                    return;
+                }
+                
+            }
 
-        snprintf(response, MAX_BUFFER_SIZE, "RLI OK\n");
-        return;
-    } else if (validation == USER_NOT_EXIST) {
-        // User is not registered, register and log in the user
+            snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "RLI OK\n");
+            return;
+        } else if (validation == USER_NOT_EXIST) {
+            // User is not registered, register and log in the user
 
-        // Construct user directory path
-        snprintf(userDir, sizeof(userDir), "AS/USERS/%s", UID);
-        // Create user directory
-        if(createDirectory(userDir) == -1){
-            snprintf(response, MAX_BUFFER_SIZE, "RLI NOK\n");
-            return;
-        }
+            // Construct user directory path
+            snprintf(userDir, sizeof(userDir), "AS/USERS/%s", UID);
+            // Create user directory
+            if(createDirectory(userDir) == -1){
+                snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "RLI NOK\n");
+                return;
+            }
 
-        // Create password file
-        snprintf(filename, sizeof(filename), "%s_pass.txt", UID);
-        if(createFile(userDir, filename) == -1){
-            snprintf(response, MAX_BUFFER_SIZE, "RLI NOK\n");
-            return;
-        }
-        // Create login file
-        snprintf(filename, sizeof(filename), "%s_login.txt", UID);
-        if(createFile(userDir, filename) == -1){
-            snprintf(response, MAX_BUFFER_SIZE, "RLI NOK\n");
-            return;
-        }
-        
-        // Store the password in the password file
-        snprintf(filename, sizeof(filename), "%s_pass.txt", UID);
-        snprintf(filePath, sizeof(filePath), "%s/%s", userDir, filename);
-        if(writeFile(filePath, password) == -1){
-            snprintf(response, MAX_BUFFER_SIZE, "RLI NOK\n");
-            return;
-        }
-        
-        // Create HOSTED and BIDDED directories
-        char userDirCopy[50];
-        strcpy(userDirCopy, userDir);
-        if(createDirectory(strcat(userDir, "/HOSTED")) == -1){
-            snprintf(response, MAX_BUFFER_SIZE, "RLI NOK\n");
-            return;
-        }
+            // Create password file
+            snprintf(filename, sizeof(filename), "%s_pass.txt", UID);
+            if(createFile(userDir, filename) == -1){
+                snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "RLI NOK\n");
+                return;
+            }
+            // Create login file
+            snprintf(filename, sizeof(filename), "%s_login.txt", UID);
+            if(createFile(userDir, filename) == -1){
+                snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "RLI NOK\n");
+                return;
+            }
+            
+            // Store the password in the password file
+            snprintf(filename, sizeof(filename), "%s_pass.txt", UID);
+            snprintf(filePath, sizeof(filePath), "%s/%s", userDir, filename);
+            if(writeFile(filePath, password) == -1){
+                snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "RLI NOK\n");
+                return;
+            }
+            
+            // Create HOSTED and BIDDED directories
+            char userDirCopy[50];
+            strcpy(userDirCopy, userDir);
+            if(createDirectory(strcat(userDir, "/HOSTED")) == -1){
+                snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "RLI NOK\n");
+                return;
+            }
 
-        if(createDirectory(strcat(userDirCopy, "/BIDDED")) == -1){
-            snprintf(response, MAX_BUFFER_SIZE, "RLI NOK\n");
+            if(createDirectory(strcat(userDirCopy, "/BIDDED")) == -1){
+                snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "RLI NOK\n");
+                return;
+            }
+
+            snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "RLI REG\n");
+            return;
+        } else if(validation == INVALID_PASSWORD) {
+            // User exists but the password is invalid
+            snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "RLI NOK\n");
+            return;
+        }else{
+            // Unexpected error
+            snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "RLI NOK\n");
             return;
         }
-
-        snprintf(response, MAX_BUFFER_SIZE, "RLI REG\n");
-        return;
-    } else if(validation == INVALID_PASSWORD) {
-        // User exists but the password is invalid
-        snprintf(response, MAX_BUFFER_SIZE, "RLI NOK\n");
-        return;
-    }else{
-        // Unexpected error
-        snprintf(response, MAX_BUFFER_SIZE, "RLI NOK\n");
-        return;
     }
 }
 
-//TODO: como e quando encerrar o leilao com limite de tempo? -> requests que o tentem aceder
 void handleOpenAuctionRequest(char *request, char *response) {
     char *UID = strtok(request, " ");
     char *password = strtok(NULL, " ");
@@ -858,72 +914,89 @@ void handleOpenAuctionRequest(char *request, char *response) {
 
     int start_value = atoi(start_value_str);
     int timeactive = atoi(timeactive_str);
-    //int Fsize = atoi(Fsize_str); //TODO: unused - remove?
+    //int Fsize = atoi(Fsize_str); //TODO: unused
 
-    int validation = validateUser(UID, password); //TODO: check if user is already logged in first?
+    if(validateUserCredentialsFormating(UID, password) == -1){
+        snprintf(response, MAX_RESPONSE_TCP_BUFFER_SIZE, "ROA NOK\n");
+        return;
+    }
+    
+    if (LoggedIn(UID)) {
+        int validation = validateUser(UID, password);
 
-    if (validation == VALID_USER) {
-        // Valid user
-        int AID = newAIDdirectory();
-        if (AID != -1) {
-            // Create START file
-            char startFilePath[100];
-            snprintf(startFilePath, sizeof(startFilePath), "AS/AUCTIONS/%03d/START.txt", AID);
-            FILE *startFile = fopen(startFilePath, "w");
-            if (startFile != NULL) {
-                fprintf(startFile, "%s %s %s %d %d", UID, name, Fname, start_value, timeactive);
-                fclose(startFile);
+        if (validation == VALID_USER) {
+            // Valid user
+            int AID = newAIDdirectory();
+            if (AID != -1) {
+                char AIDdirectory[100];
+                snprintf(AIDdirectory, sizeof(AIDdirectory), "AS/AUCTIONS/%03d", AID);
+                // Create START file
+                char startFilePath[100];
+                snprintf(startFilePath, sizeof(startFilePath), "AS/AUCTIONS/%03d/START.txt", AID);
+                FILE *startFile = fopen(startFilePath, "w");
+                if (startFile != NULL) {
+                    fprintf(startFile, "%s %s %s %d %d", UID, name, Fname, start_value, timeactive);
+                    fclose(startFile);
+                } else {
+                    perror("Error creating START file");
+                    snprintf(response, MAX_RESPONSE_TCP_BUFFER_SIZE, "NOK\n");
+                    delete_directory(AIDdirectory);
+                    return;
+                }
+                // Create asset file
+                char assetFilePath[100];
+                snprintf(assetFilePath, sizeof(assetFilePath), "AS/AUCTIONS/%03d/%s", AID, Fname);
+                if(writeFile(assetFilePath, Fdata) == -1){
+                    snprintf(response, MAX_RESPONSE_TCP_BUFFER_SIZE, "NOK\n");
+                    delete_directory(AIDdirectory);
+                    return;
+                }
+
+                // Create BIDS directory
+                char bidsDir[50];
+                snprintf(bidsDir, sizeof(bidsDir), "AS/AUCTIONS/%03d/BIDS", AID);
+                if(createDirectory(bidsDir) == -1){
+                    snprintf(response, MAX_RESPONSE_TCP_BUFFER_SIZE, "NOK\n");
+                    delete_directory(AIDdirectory);
+                    return;
+                }
+
+                // Create an empty file in the UID's HOSTED directory with the AID as the filename
+                char hostedDir[50];
+                snprintf(hostedDir, sizeof(hostedDir), "AS/USERS/%s/HOSTED", UID);
+                if(createDirectory(hostedDir) == -1){
+                    snprintf(response, MAX_RESPONSE_TCP_BUFFER_SIZE, "NOK\n");
+                    delete_directory(AIDdirectory);
+                    return;
+                }
+
+                char hostedFilename[100];
+                snprintf(hostedFilename, sizeof(hostedFilename), "%03d.txt", AID);
+                
+                if(createFile(hostedDir, hostedFilename) == -1){
+                    snprintf(response, MAX_RESPONSE_TCP_BUFFER_SIZE, "NOK\n");
+                    delete_directory(AIDdirectory);
+                    return;
+                }
+
+                snprintf(response, MAX_RESPONSE_TCP_BUFFER_SIZE, "ROA OK %03d\n", AID);
+                return;
             } else {
-                perror("Error creating START file");
-                snprintf(response, MAX_BUFFER_SIZE, "ERR\n");
+                // Error creating new AID directory
+                snprintf(response, MAX_RESPONSE_TCP_BUFFER_SIZE, "ROA NOK\n");
                 return;
             }
-
-            // Create asset file
-            char assetFilePath[100];
-            snprintf(assetFilePath, sizeof(assetFilePath), "AS/AUCTIONS/%03d/%s", AID, Fname);
-            if(writeFile(assetFilePath, Fdata) == -1){
-                snprintf(response, MAX_BUFFER_SIZE, "ERR\n");
-                return;
-            }
-
-            // Create BIDS directory
-            char bidsDir[50];
-            snprintf(bidsDir, sizeof(bidsDir), "AS/AUCTIONS/%03d/BIDS", AID);
-            if(createDirectory(bidsDir) == -1){
-                snprintf(response, MAX_BUFFER_SIZE, "ERR\n");
-                return;
-            }
-
-            // Create an empty file in the UID's HOSTED directory with the AID as the filename
-            char hostedDir[50];
-            snprintf(hostedDir, sizeof(hostedDir), "AS/USERS/%s/HOSTED", UID);
-            if(createDirectory(hostedDir) == -1){
-                snprintf(response, MAX_BUFFER_SIZE, "ERR\n");
-                return;
-            }
-
-            char hostedFilename[100];
-            snprintf(hostedFilename, sizeof(hostedFilename), "%03d.txt", AID);
-            
-            if(createFile(hostedDir, hostedFilename) == -1){
-            snprintf(response, MAX_BUFFER_SIZE, "ERR\n");
+        } else if (validation == INVALID_PASSWORD || validation == USER_NOT_EXIST  || validation == MISSING_PASSWORD) {
+            snprintf(response, MAX_RESPONSE_TCP_BUFFER_SIZE, "ROA NOK\n");
             return;
-        }
-
-            snprintf(response, MAX_BUFFER_SIZE, "ROA OK %03d\n", AID);
         } else {
-            // Error creating new AID directory
-            snprintf(response, MAX_BUFFER_SIZE, "ROA NOK\n");
+            // Unexpected error
+            snprintf(response, MAX_RESPONSE_TCP_BUFFER_SIZE, "ROA NOK\n");
             return;
         }
-    } else if (validation == USER_NOT_EXIST) {
-        snprintf(response, MAX_BUFFER_SIZE, "ROA NLG\n");
-    } else if (validation == INVALID_PASSWORD) {
-        snprintf(response, MAX_BUFFER_SIZE, "ROA NLG\n");
-    } else {
-        // Unexpected error
-        snprintf(response, MAX_BUFFER_SIZE, "ROA NOK\n");
+    }else{
+        snprintf(response, MAX_RESPONSE_TCP_BUFFER_SIZE, "ROA NLG\n");
+        return;
     }
 }
 
@@ -949,29 +1022,29 @@ void handleCloseAuctionRequest(char* request, char* response) {
                     char endFilePath[100];
                     snprintf(endFilePath, sizeof(endFilePath), "AS/AUCTIONS/%03d", AID);
                     if(createFile(endFilePath, "END.txt") == -1){
-                        snprintf(response, MAX_BUFFER_SIZE, "ERR\n");
+                        snprintf(response, MAX_RESPONSE_TCP_BUFFER_SIZE, "ERR\n");
                         return;
                     }
                     //TODO: check if the auction already exceeded the time limit and close it by writing the actual end time
                         //If not, write the current end datetime end sec time
-                    snprintf(response, MAX_BUFFER_SIZE, "RCL OK\n");
+                    snprintf(response, MAX_RESPONSE_TCP_BUFFER_SIZE, "RCL OK\n");
                     return;
                 } else {
-                    snprintf(response, MAX_BUFFER_SIZE, "RCL END\n"); // Auction has already ended
+                    snprintf(response, MAX_RESPONSE_TCP_BUFFER_SIZE, "RCL END\n"); // Auction has already ended
                 }
             } else {
-                snprintf(response, MAX_BUFFER_SIZE, "RCL EOW\n"); // Auction is not owned by the user
+                snprintf(response, MAX_RESPONSE_TCP_BUFFER_SIZE, "RCL EOW\n"); // Auction is not owned by the user
             }
         } else {
-            snprintf(response, MAX_BUFFER_SIZE, "RCL EAU\n"); // Auction does not exist
+            snprintf(response, MAX_RESPONSE_TCP_BUFFER_SIZE, "RCL EAU\n"); // Auction does not exist
         }
     } else if (validation == USER_NOT_EXIST) {
-        snprintf(response, MAX_BUFFER_SIZE, "RCL NOK\n"); //TODO: Not  specified? maybe NOK
+        snprintf(response, MAX_RESPONSE_TCP_BUFFER_SIZE, "RCL NOK\n"); //TODO: Not  specified? maybe NOK
     } else if (validation == INVALID_PASSWORD) {
-        snprintf(response, MAX_BUFFER_SIZE, "RCL NLG\n");
+        snprintf(response, MAX_RESPONSE_TCP_BUFFER_SIZE, "RCL NLG\n");
     } else {
         // Unexpected error
-        snprintf(response, MAX_BUFFER_SIZE, "RCL NOK\n");
+        snprintf(response, MAX_RESPONSE_TCP_BUFFER_SIZE, "RCL NOK\n");
     }
 }
 
@@ -982,7 +1055,7 @@ void handleMyAuctionsRequest(char* request, char* response) {//TODO: resposta ma
     char* UID = strtok(request, " ");
 
     // Initialize response with "RMA OK"
-    snprintf(response, MAX_BUFFER_SIZE, "RMA OK");
+    snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "RMA OK");
 
     char userDir[50];
     snprintf(userDir, sizeof(userDir), "AS/USERS/%s", UID);
@@ -1000,7 +1073,7 @@ void handleMyAuctionsRequest(char* request, char* response) {//TODO: resposta ma
                 char state = auctionAlreadyEnded(atoi(AID)) ? '0' : '1'; //TODO: REMOVE?  (myauctions, mybids, list) vêm tanto auctions ativos como inativos
                 // Append AID and state to the string
                 snprintf(auctionString, sizeof(auctionString), " %s %c", AID, state);
-                strncat(response, auctionString, MAX_BUFFER_SIZE - strlen(response) - 1);
+                strncat(response, auctionString, MAX_RESPONSE_UDP_BUFFER_SIZE - strlen(response) - 1);
                 auctionCount++;
             }
         }
@@ -1019,7 +1092,7 @@ void handleMyAuctionsRequest(char* request, char* response) {//TODO: resposta ma
                 char state = auctionAlreadyEnded(atoi(AID)) ? '0' : '1'; //TODO: REMOVE?  (myauctions, mybids, list) vêm tanto auctions ativos como inativos
                 // Append AID and state to the string
                 snprintf(auctionString, sizeof(auctionString), " %s %c", AID, state);
-                strncat(response, auctionString, MAX_BUFFER_SIZE - strlen(response) - 1);
+                strncat(response, auctionString, MAX_RESPONSE_UDP_BUFFER_SIZE - strlen(response) - 1);
                 auctionCount++;
             }
         }
@@ -1032,7 +1105,7 @@ void handleMyAuctionsRequest(char* request, char* response) {//TODO: resposta ma
         strcat(response, "\n");
     } else {
         // No ongoing auctions for the user
-        snprintf(response, MAX_BUFFER_SIZE, "RMA NOK\n");
+        snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "RMA NOK\n");
     }
 }
 
@@ -1044,7 +1117,7 @@ void handleMyBidsRequest(char* request, char* response) { //TODO: Diferent lkogi
 
     if (LoggedIn(UID)) {
         // Initialize response with "RMA OK"
-        snprintf(response, MAX_BUFFER_SIZE, "RMB OK");
+        snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "RMB OK");
 
         char biddedDir[50];
         snprintf(biddedDir, sizeof(biddedDir), "AS/USERS/%s/BIDDED", UID);
@@ -1052,7 +1125,7 @@ void handleMyBidsRequest(char* request, char* response) { //TODO: Diferent lkogi
         if (isDirectoryEmpty(biddedDir) == 0) {
             // User has ongoing bids
             // Prepare response string
-            snprintf(response, MAX_BUFFER_SIZE, "RMB OK");
+            snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "RMB OK");
 
             // Open the BIDDED directory
             DIR* biddedDirPtr = opendir(biddedDir);
@@ -1069,7 +1142,7 @@ void handleMyBidsRequest(char* request, char* response) { //TODO: Diferent lkogi
 
                         // Append AID and state to the response string
                         snprintf(bidString, sizeof(bidString), " %s %c", AID, state);
-                        strncat(response, bidString, MAX_BUFFER_SIZE - strlen(response) - 1);
+                        strncat(response, bidString, MAX_RESPONSE_UDP_BUFFER_SIZE - strlen(response) - 1);
                         bidCount++;
                     }
                 }
@@ -1077,22 +1150,22 @@ void handleMyBidsRequest(char* request, char* response) { //TODO: Diferent lkogi
                 strcat(response, "\n");
             }else {
                 //BIDS Directory not found
-                snprintf(response, MAX_BUFFER_SIZE, "RMB NOK\n");
+                snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "RMB NOK\n");
             }
         } else {
             // User has no ongoing bids
-            snprintf(response, MAX_BUFFER_SIZE, "RMB NOK\n");
+            snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "RMB NOK\n");
             return;
         }
 
         if(bidCount==0){
 
-            snprintf(response, MAX_BUFFER_SIZE, "RMB NOK\n");
+            snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "RMB NOK\n");
 
         }
     } else {
         // User is not logged in
-        snprintf(response, MAX_BUFFER_SIZE, "RMB NLG\n");
+        snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "RMB NLG\n");
     }
 }
 
@@ -1101,7 +1174,7 @@ void handleListAuctionsRequest(char* response) {
     int auctionCount = 0;
 
     // Initialize response with "LST OK"
-    snprintf(response, MAX_BUFFER_SIZE, "LST OK");
+    snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "LST OK");
     
     // Open the AUCTIONS directory
     DIR* auctionsDirPtr = opendir("AS/AUCTIONS");
@@ -1116,7 +1189,7 @@ void handleListAuctionsRequest(char* response) {
                 char state = auctionAlreadyEnded(atoi(AID)) ? '0' : '1'; //TODO: REMOVE?  (myauctions, mybids, list) vêm tanto auctions ativos como inativos
                 // Append AID and state to the string
                 snprintf(auctionString, sizeof(auctionString), " %s %c", AID, state);
-                strncat(response, auctionString, MAX_BUFFER_SIZE - strlen(response) - 1);
+                strncat(response, auctionString, MAX_RESPONSE_UDP_BUFFER_SIZE - strlen(response) - 1);
                 auctionCount++;
             }
         }
@@ -1129,7 +1202,7 @@ void handleListAuctionsRequest(char* response) {
         strcat(response, "\n");
     } else {
         // No ongoing auctions for the user
-        snprintf(response, MAX_BUFFER_SIZE, "LST NOK\n");
+        snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "LST NOK\n");
     }
 }
 
@@ -1171,17 +1244,17 @@ void handleShowAssetRequest(char* request, char* response) {
             fileContents[fileSize] = '\0';//TODO: Is this needed? wont it overwrite the last character
 
             // Prepare response
-            snprintf(response, MAX_BUFFER_SIZE, "RSA OK %s %ld %s\n", Fname, fileSize, fileContents);
+            snprintf(response, MAX_RESPONSE_TCP_BUFFER_SIZE, "RSA OK %s %ld %s\n", Fname, fileSize, fileContents);
 
             // Free allocated memory
             free(fileContents);
         } else {
             // Asset file not found
-            snprintf(response, MAX_BUFFER_SIZE, "RSA NOK\n");
+            snprintf(response, MAX_RESPONSE_TCP_BUFFER_SIZE, "RSA NOK\n");
         }
     } else {
         // START file not found
-        snprintf(response, MAX_BUFFER_SIZE, "RSA NOK\n");
+        snprintf(response, MAX_RESPONSE_TCP_BUFFER_SIZE, "RSA NOK\n");
     }
 }
 
@@ -1217,30 +1290,30 @@ void handleBidRequest(char* request, char* response) {
                     char bidFilename[50];
                     snprintf(bidFilename, sizeof(bidFilename), "%03d.txt", AID);
                     createFile(bidDir, bidFilename);
-                    snprintf(response, MAX_BUFFER_SIZE, "RBD ACC\n");
+                    snprintf(response, MAX_RESPONSE_TCP_BUFFER_SIZE, "RBD ACC\n");
                     return;
                 } else if (result == -2) {
                     // Bid refused because a larger bid has already been placed
-                    snprintf(response, MAX_BUFFER_SIZE, "RBD REF\n");
+                    snprintf(response, MAX_RESPONSE_TCP_BUFFER_SIZE, "RBD REF\n");
                     return;
                 } else {
                     // Error handling the new bid
-                    snprintf(response, MAX_BUFFER_SIZE, "RBD NOK\n");
+                    snprintf(response, MAX_RESPONSE_TCP_BUFFER_SIZE, "RBD NOK\n");
                     return;
                 }
             } else {
                 // Illegal bid in an auction hosted by the user
-                snprintf(response, MAX_BUFFER_SIZE, "RBD ILG\n");
+                snprintf(response, MAX_RESPONSE_TCP_BUFFER_SIZE, "RBD ILG\n");
             }
         } else {
             // Auction does not exist
-            snprintf(response, MAX_BUFFER_SIZE, "RBD NOK\n");
+            snprintf(response, MAX_RESPONSE_TCP_BUFFER_SIZE, "RBD NOK\n");
         }
     } else if (validation == USER_NOT_EXIST || validation == INVALID_PASSWORD) {//TODO:Notspecified invalid password
-        snprintf(response, MAX_BUFFER_SIZE, "RBD NLG\n");
+        snprintf(response, MAX_RESPONSE_TCP_BUFFER_SIZE, "RBD NLG\n");
     } else {
         // Unexpected error
-        snprintf(response, MAX_BUFFER_SIZE, "RBD NOK\n");
+        snprintf(response, MAX_RESPONSE_TCP_BUFFER_SIZE, "RBD NOK\n");
     }
 }
 
@@ -1266,7 +1339,7 @@ void handleShowRecordRequest(char* request, char* response) { //TODO: not very w
         // Prepare the initial response
         char currentDateTime[20];
         getCurrentDateTime(currentDateTime);
-        snprintf(response, MAX_BUFFER_SIZE, "RRC OK %s %s %s %d %s %d", host_UID, auction_name, asset_fname, start_value, currentDateTime, timeactive);
+        snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "RRC OK %s %s %s %d %s %d", host_UID, auction_name, asset_fname, start_value, currentDateTime, timeactive);
 
         // Check if the auction has received bids
         char bidsDir[100];
@@ -1290,7 +1363,7 @@ void handleShowRecordRequest(char* request, char* response) { //TODO: not very w
                         fclose(bidFile);
 
                         // Append bid information to the response
-                        snprintf(response + strlen(response), MAX_BUFFER_SIZE - strlen(response), "\nB %s %d %s %d", bidder_UID, bid_value, bid_date_time, bid_sec_time);// TODO: como vamos lidar com estes \n ???
+                        snprintf(response + strlen(response), MAX_RESPONSE_UDP_BUFFER_SIZE - strlen(response), "\nB %s %d %s %d", bidder_UID, bid_value, bid_date_time, bid_sec_time);// TODO: como vamos lidar com estes \n ???
                     }
                 }
             }
@@ -1310,14 +1383,14 @@ void handleShowRecordRequest(char* request, char* response) { //TODO: not very w
                 fscanf(endFile, "%s %d", end_date_time, &end_sec_time);
                 fclose(endFile);
                 // Append closing information to the response
-                snprintf(response + strlen(response), MAX_BUFFER_SIZE - strlen(response), "\nE %s %d", end_date_time, end_sec_time);
+                snprintf(response + strlen(response), MAX_RESPONSE_UDP_BUFFER_SIZE - strlen(response), "\nE %s %d", end_date_time, end_sec_time);
             }
         }
         // Append \n to the response
         sprintf(response + strlen(response), "\n");
     } else {
         // Auction not found
-        snprintf(response, MAX_BUFFER_SIZE, "RRC NOK");
+        snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "RRC NOK");
     }
 }
 
@@ -1325,8 +1398,8 @@ void handleLogoutRequest(char* request, char* response) {
     char* UID = strtok(request, " ");
     char* password = strtok(NULL, " ");
 
-    if(validateUserCredentialsFormating(UID, password) == 1){
-        snprintf(response, MAX_BUFFER_SIZE, "RLO NOK\n");
+    if(validateUserCredentialsFormating(UID, password) == -1){
+        snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "RLO NOK\n");
         return;
     }
     if (LoggedIn(UID)) {
@@ -1342,23 +1415,23 @@ void handleLogoutRequest(char* request, char* response) {
             snprintf(filePath, sizeof(filePath), "%s/%s", userDir, filename);
             // Delete the login file
             if(removeFile(filePath) == -1){
-                snprintf(response, MAX_BUFFER_SIZE, "RLO NOK\n");
+                snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "RLO NOK\n");
                 return;
             }
-            snprintf(response, MAX_BUFFER_SIZE, "RLO NOK\n");
+            snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "RLO NOK\n");
             return;
         } else if (validation == INVALID_PASSWORD) {
-            snprintf(response, MAX_BUFFER_SIZE, "RLO NOK\n");//Not specified
+            snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "RLO NOK\n");//Not specified
             return;
         } else if (validation == USER_NOT_EXIST || validation == MISSING_PASSWORD) {
-            snprintf(response, MAX_BUFFER_SIZE, "RLO UNR\n");
+            snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "RLO UNR\n");
             return;
         }else{
-            snprintf(response, MAX_BUFFER_SIZE, "RLO NOK\n");
+            snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "RLO NOK\n");
             return;
         }
     }else{
-        snprintf(response, MAX_BUFFER_SIZE, "RLO NOK\n");
+        snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "RLO NOK\n");
         return;
     }
 }
@@ -1366,6 +1439,11 @@ void handleLogoutRequest(char* request, char* response) {
 void handleUnregisterRequest(char* request, char* response) {
     char* UID = strtok(request, " ");
     char* password = strtok(NULL, " ");
+
+    if(validateUserCredentialsFormating(UID, password) == -1){
+        snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "RUR NOK\n");
+        return;
+    }
 
     if (LoggedIn(UID)) {
         // Validate user existence and password
@@ -1380,32 +1458,32 @@ void handleUnregisterRequest(char* request, char* response) {
             char filePath[100];
             snprintf(filePath, sizeof(filePath), "%s/%s", userDir, filename);
             if(removeFile(filePath)== -1){
-                snprintf(response, MAX_BUFFER_SIZE, "RUR NOK\n");
+                snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "RUR NOK\n");
                 return;
             }
             // Delete login file
             snprintf(filename, sizeof(filename), "%s_login.txt", UID);
             snprintf(filePath, sizeof(filePath), "%s/%s", userDir, filename);
             if(removeFile(filePath) == -1){
-                snprintf(response, MAX_BUFFER_SIZE, "RUR NOK\n");
+                snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "RUR NOK\n");
                 return;
             }
-            snprintf(response, MAX_BUFFER_SIZE, "RUR OK\n");
+            snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "RUR OK\n");
             return;
         } else if (validation == USER_NOT_EXIST || validation == MISSING_PASSWORD) {
             // User is not registered
-            snprintf(response, MAX_BUFFER_SIZE, "RUR UNR\n");
+            snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "RUR UNR\n");
             return;
         } else if(validation == INVALID_PASSWORD){
             // User exists but the password is invalid
-            snprintf(response, MAX_BUFFER_SIZE, "RUR NOK\n");
+            snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "RUR NOK\n");
             return;
         }else{
-            snprintf(response, MAX_BUFFER_SIZE, "RUR NOK\n");
+            snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "RUR NOK\n");
             return;
         }
     }else{
-        snprintf(response, MAX_BUFFER_SIZE, "RUR NOK\n");
+        snprintf(response, MAX_RESPONSE_UDP_BUFFER_SIZE, "RUR NOK\n");
         return;
     }
 }
