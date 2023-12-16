@@ -41,6 +41,7 @@
 #define MAX_FSIZE_NUM 0xA00000 // 10 MB
 #define TIMEOUT 100000 //TODO: 5 seconds
 #define PATH_MAX 100
+#define MAX_TCP_CONNECTIONS 5
 
 int createUDPSocket() {
     int udpSocket = socket(AF_INET, SOCK_DGRAM, 0);
@@ -364,7 +365,7 @@ int handleTCPrequests(const char* Asport, int verbose){
     freeaddrinfo(res);
 
     // Listen for incoming connections
-    if (listen(tcpSocket, 5) == -1) { //TODO: only 5 waiting requests? make this a #define
+    if (listen(tcpSocket, MAX_TCP_CONNECTIONS) == -1) {
         // If listen fails, print error and exit
         perror("Error listening on TCP socket");
         return -1;
@@ -1192,7 +1193,6 @@ void handleMyBidsRequest(char* request, char* response) {
     }
 }
 
-//TODO: responde sempre com RLS NOK mesmo quando ha leiloes acho eu
 void handleListAuctionsRequest(char* response) {
     char auctionString[10];
     int auctionCount = 0;
@@ -1315,8 +1315,8 @@ void handleBidRequest(char* request, char* response) {
                     int start_value;
                     if (fscanf(startFile, "%*s %*s %*s %d %*d %*s %*s %*d", &start_value) == 1) {
                         fclose(startFile);
-                        // Check if bid is larger than the starting value
-                        if (value < start_value) {
+                        // Check if bid is larger or equal than the starting value
+                        if (value <= start_value) {
                             snprintf(response, MAX_TCP_REPLY_BUFFER_SIZE, "RBD REF\n");
                             return;
                         }
