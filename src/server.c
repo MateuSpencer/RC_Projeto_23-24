@@ -40,6 +40,7 @@
 #define MAX_FSIZE_LEN 8
 #define MAX_FSIZE_NUM 0xA00000 // 10 MB
 #define TIMEOUT 100000 //TODO: 5 seconds
+#define PATH_MAX 100
 
 int createUDPSocket() {
     int udpSocket = socket(AF_INET, SOCK_DGRAM, 0);
@@ -1191,12 +1192,13 @@ void handleMyBidsRequest(char* request, char* response) {
     }
 }
 
+//TODO: responde sempre com RLS NOK mesmo quando ha leiloes acho eu
 void handleListAuctionsRequest(char* response) {
     char auctionString[10];
     int auctionCount = 0;
 
-    // Initialize response with "LST OK"
-    snprintf(response, MAX_UDP_REPLY_BUFFER_SIZE, "LST OK");
+    // Initialize response with "RLS OK"
+    snprintf(response, MAX_UDP_REPLY_BUFFER_SIZE, "RLS OK");
     
     // Open the AUCTIONS directory
     DIR* DirPtr = opendir("AS/AUCTIONS");
@@ -1205,12 +1207,13 @@ void handleListAuctionsRequest(char* response) {
         struct dirent* entry;
         // Loop through the AUCTIONS directory
         while ((entry = readdir(DirPtr)) != NULL) {
-            if (entry->d_type == DT_DIR && strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
+            //entry->d_type == DT_DIR && 
+            if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
                 char* AID_str = entry->d_name;
                 int AID = atoi(AID_str);
                 int state = auctionState(AID);
                 if(state == -1){
-                    snprintf(response, MAX_UDP_REPLY_BUFFER_SIZE, "LST NOK\n");
+                    snprintf(response, MAX_UDP_REPLY_BUFFER_SIZE, "RLS NOK\n");
                     return;
                 }
                 // Append AID and state to the string
@@ -1227,7 +1230,7 @@ void handleListAuctionsRequest(char* response) {
         strcat(response, "\n");
     } else {
         // No ongoing auctions
-        snprintf(response, MAX_UDP_REPLY_BUFFER_SIZE, "LST NOK\n");
+        snprintf(response, MAX_UDP_REPLY_BUFFER_SIZE, "RLS NOK\n");
     }
 }
 
