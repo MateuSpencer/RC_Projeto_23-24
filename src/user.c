@@ -494,6 +494,8 @@ void myAuctions(char* UID, const char* ASIP, const char* Asport) {
         printf("%s has no auctions\n", UID);
     } else if(strcmp(udpReplyBuffer, "RMA NLG\n") == 0){
         printf("%s is not logged in.\n", UID);
+    } else if(strcmp(udpReplyBuffer, "RMA ERR\n") == 0){
+        printf("Error in command myauctions\n");
     } else {
         char pairs[1998][4];
         char (*result)[4] = parsePairs(udpReplyBuffer, pairs);
@@ -521,6 +523,8 @@ void myBids(char* UID, const char* ASIP, const char* Asport) {
         printf("%s has no bids.\n", UID);
     } else if(strcmp(udpReplyBuffer, "RMB NLG\n") == 0){
         printf("%s is not logged in.\n", UID);
+    } else if(strcmp(udpReplyBuffer, "RMB ERR\n") == 0){
+        printf("Error in command my bids.\n");
     } else {
         char pairs[1998][4];
         char (*result)[4] = parsePairs(udpReplyBuffer, pairs);
@@ -656,7 +660,7 @@ void showRecord(char* AID, const char* ASIP, const char* Asport) {
             printf("Segment: %s\n", token);
             if(sscanf(token, "RRC OK %s %s %s %s %s %s %s", host_UID, auction_name, asset_fname, start_value, start_date, start_time, timeactive) == 7){
                 printf("AUCTION\n");
-                printf("Host UID: %s\nAuction Name: %s\nAsset Name: %s\nStarting Value: %s\nStarting Date: %s\nStarting Time: %sTime Active: %s\n\n", host_UID, auction_name, asset_fname, start_value, start_date, start_time, timeactive);
+                printf("Host UID: %s\nAuction Name: %s\nAsset Name: %s\nStarting Value: %s\nStarting Date: %s\nStarting Time: %s\nTime Active: %s\n\n", host_UID, auction_name, asset_fname, start_value, start_date, start_time, timeactive);
             } else if(sscanf(token, "%s %s %s %s %s", bidder_UID, bid_value, bid_date, bid_time, bid_sec_time) == 5){
                 printf("BID\n");
                 printf("Bidder UID: %s\nBid Value: %s\nBid Date: %s\nBid Time: %s\nBid Time in Seconds: %s\n\n", host_UID, bid_value, bid_date, bid_time, bid_sec_time);
