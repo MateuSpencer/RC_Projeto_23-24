@@ -577,6 +577,22 @@ void showAsset(char* AID, const char* ASIP, const char* Asport) {
         token = strtok(NULL, " ");
         char* fdata = token;
 
+        char filePath[100];
+        snprintf(filePath, sizeof(filePath), "./%s", fname);
+
+        
+        FILE *file = fopen(filePath, "w");
+
+        if (file != NULL) {
+            int size = atoi(fsize);
+            while(size > 0){
+                size -= fprintf(file, "%s", fdata);
+            }
+            fclose(file);
+        } else {
+            perror("Error creating file");
+        }
+
         printf("Asset Received:\n");
         printf("Filename: %s\n", fname);
         printf("File Size: %s bytes\n", fsize);
