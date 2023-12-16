@@ -440,6 +440,8 @@ void closeAuction(char* UID, char* password, char* AID, const char* ASIP, const 
         printf("Error: Auction %s is not owned by user %s.\n", AID, UID);
     } else if (strncmp(tcpReplyBuffer, "RCL END", 7) == 0) {
         printf("Error: Auction %s owned by user %s has already finished.\n", AID, UID);
+    } else if (strncmp(tcpReplyBuffer, "RCL ERR", 7) == 0) {
+        printf("Error in command close\n\n");
     }
 }
 
@@ -550,6 +552,8 @@ void listAuctions(const char* ASIP, const char* Asport) {
     // Process reply and display results
     if(strcmp(udpReplyBuffer, "RLS NOK\n") == 0){
         printf("No auctions have been started.\n");
+    } else if(strcmp(udpReplyBuffer, "RLS ERR\n") == 0){
+        printf("Error in command list\n");
     } else {
         char pairs[1998][4];
         char (*result)[4] = parsePairs(udpReplyBuffer, pairs);
@@ -601,9 +605,8 @@ void showAsset(char* AID, const char* ASIP, const char* Asport) {
         printf("Filename: %s\n", fname);
         printf("File Size: %s bytes\n", fsize);
         printf("File Data: %s\n", fdata);
-        //TODO: Criar ficheiro local com o fdata
-    } else {
-        printf("Show Asset Result: %s\n", tcpReplyBuffer);
+    } else if(strncmp(tcpReplyBuffer, "RSA NOK", 7) == 0){
+        printf("No file could be sent.\n");
     }
 }
 
