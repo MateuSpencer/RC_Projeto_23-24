@@ -566,11 +566,10 @@ void listAuctions(char* ASIP, char* ASPort) {
     }
 }
 
-//TODO FIX - problema a recebner no TCPMessage
 void showAsset(char* AID, char* ASIP, char* ASPort) {
     // Prepare show asset message
     char showAssetMessage[MAX_BUFFER_SIZE];
-    snprintf(showAssetMessage, sizeof(showAssetMessage), "SAS %s", AID);
+    snprintf(showAssetMessage, sizeof(showAssetMessage), "SAS %s\n", AID);
 
     char reply[MAX_BUFFER_SIZE];
     TCPMessage(showAssetMessage, reply, ASPort, ASIP, 0);
@@ -589,6 +588,7 @@ void showAsset(char* AID, char* ASIP, char* ASPort) {
         printf("Filename: %s\n", fname);
         printf("File Size: %s bytes\n", fsize);
         printf("File Data: %s\n", fdata);
+        //TODO: Criar ficheiro local com o fdata
     } else {
         printf("Show Asset Result: %s\n", reply);
     }
