@@ -11,17 +11,16 @@
 
 // #include "common.h"
 
-#define MAX_BUFFER_SIZE 4000//TODO: faze out
+#define MAX_UDP_REQUEST_BUFFER_SIZE 21 //LIN / LOU
+#define MIN_UDP_REQUEST_BUFFER_SIZE 4 //LST
+#define MAX_UDP_REPLY_BUFFER_SIZE 6000 //TODO: what size limit?
 
-#define MAX_REQUEST_UDP_BUFFER_SIZE 21 //LIN / LOU
-#define MIN_REQUEST_UDP_BUFFER_SIZE 4 //LST
-#define MAX_RESPONSE_UDP_BUFFER_SIZE 6000 //TODO: what size limit?
-
-#define MAX_REQUEST_TCP_BUFFER_SIZE 4000 //TODO: what size limit? should be enough for the biggest file size allowed and the message - 10 MB+?
-#define MAX_RESPONSE_TCP_BUFFER_SIZE 4000 //TODO: what size limit? should be enough for the biggest file size allowed and the message - 10 MB+?
+#define MAX_TCP_REQUEST_BUFFER_SIZE 4000 //TODO: what size limit? should be enough for the biggest file size allowed and the message - 10 MB+?
+#define MAX_TCP_REPLY_BUFFER_SIZE 4000 //TODO: what size limit? should be enough for the biggest file size allowed and the message - 10 MB+?
 
 #define UID_SIZE 6
 #define PASSWORD_SIZE 8
+#define MAX_BID_SIZE 6
 #define MAX_FILENAME_SIZE 24
 #define MAX_FSIZE_LEN 8
 #define MAX_FSIZE_NUM 0xA00000 // 10 MB
@@ -45,29 +44,29 @@ int createTCPSocket() {
     return tcpSocket;
 }
 
-int UDPMessage(const char* message, char* reply, char* ASPort, char* ASIP);
-int TCPMessage(const char* message, char* reply, char* ASPort, char* ASIP, int size);
+int UDPMessage(const char* message, char* reply, const char* ASIP, const char* Asport);
+int TCPMessage(const char* message, char* reply, const char* ASIP, const char* Asport, int size);
 
-int login(char* UID, char* password, char* ASIP, char* ASPort);
-void openAuction(char* UID, char* password, char* name, char* asset_fname, char* start_value, char* timeactive,char* ASIP, char* ASPort);
-void closeAuction(char* UID, char* password, char* AID, char* ASIP, char* ASPort);
-void myAuctions(char* UID, char* ASIP, char* ASPort);
-void myBids(char* UID, char* ASIP, char* ASPort);
-void listAuctions(char* ASIP, char* ASPort);
-void showAsset(char* AID, char* ASIP, char* ASPort);
-void bid(char* UID, char* password, char* AID, char* value, char* ASIP, char* ASPort);
-void showRecord(char* AID, char* ASIP, char* ASPort);
-int logout(char* UID, char* password, char* ASIP, char* ASPort);
-int unregister(char* UID, char* password, char* ASIP, char* ASPort);
+int login(char* UID, char* password, const char* ASIP, const char* Asport);
+void openAuction(char* UID, char* password, char* name, char* asset_fname, char* start_value, char* timeactive,const char* ASIP, const char* Asport);
 char *readFile(const char *filename);
+void closeAuction(char* UID, char* password, char* AID, const char* ASIP, const char* Asport);
+void myAuctions(char* UID, const char* ASIP, const char* Asport);
+void myBids(char* UID, const char* ASIP, const char* Asport);
+void listAuctions(const char* ASIP, const char* Asport);
+void showAsset(char* AID, const char* ASIP, const char* Asport);
+void bid(char* UID, char* password, char* AID, char* value, const char* ASIP, const char* Asport);
+void showRecord(char* AID, const char* ASIP, const char* Asport);
+int logout(char* UID, char* password, const char* ASIP, const char* Asport);
+int unregister(char* UID, char* password, const char* ASIP, const char* Asport);
 
 extern int errno;
 
 int main(int argc, char *argv[]) {
     char ASIP[50] = "localhost";
-    char ASport[6] = "58022";
-    char UID[7];
-    char password[9];
+    char Asport[6] = "58022";
+    char UID[UID_SIZE+1];
+    char password[PASSWORD_SIZE+1];
     int presentLoginCredentials = 0;
 
     for (int i = 1; i < argc; i++) {
@@ -76,8 +75,8 @@ int main(int argc, char *argv[]) {
             ASIP[sizeof(ASIP) - 1] = '\0';
             i++;
         } else if (strcmp(argv[i], "-p") == 0 && i + 1 < argc) {
-            strncpy(ASport, argv[i + 1], sizeof(ASport) - 1);
-            ASport[sizeof(ASport) - 1] = '\0';
+            strncpy(Asport, argv[i + 1], sizeof(Asport) - 1);
+            Asport[sizeof(Asport) - 1] = '\0';
             i++;
         }
     }
@@ -91,10 +90,10 @@ int main(int argc, char *argv[]) {
 
         // Compare command and call the corresponding function
         if (strcmp(token, "login") == 0) {
-            char UID_buffer[7];
-            char password_buffer[9];
+            char UID_buffer[UID_SIZE+1];
+            char password_buffer[PASSWORD_SIZE+1];
             scanf("%s %s", UID_buffer, password_buffer);
-            int loginResponse = login(UID_buffer, password_buffer, ASIP, ASport);
+            int loginResponse = login(UID_buffer, password_buffer, ASIP, Asport);
             if(loginResponse == 0){//success
                 strcpy(UID, UID_buffer);
                 strcpy(password, password_buffer);
@@ -109,43 +108,43 @@ int main(int argc, char *argv[]) {
             char start_value[100];
             char timeactive[100];
             scanf("%s %s %s %s", name, asset_fname, start_value, timeactive);
-            openAuction(UID, password, name, asset_fname, start_value, timeactive, ASIP, ASport);
+            openAuction(UID, password, name, asset_fname, start_value, timeactive, ASIP, Asport);
 
         } else if (strcmp(token, "close") == 0) {
             char AID[4];
             scanf("%s", AID);
-            closeAuction(UID, password, AID, ASIP, ASport);
+            closeAuction(UID, password, AID, ASIP, Asport);
 
         } else if (strcmp(token, "myauctions") == 0 || strcmp(token, "ma") == 0) {
-            myAuctions(UID, ASIP, ASport);
+            myAuctions(UID, ASIP, Asport);
 
         } else if (strcmp(token, "mybids") == 0 || strcmp(token, "mb") == 0) {
-            myBids(UID, ASIP, ASport);
+            myBids(UID, ASIP, Asport);
 
         } else if (strcmp(token, "list") == 0 || strcmp(token, "l") == 0) {
-            listAuctions(ASIP, ASport);
+            listAuctions(ASIP, Asport);
 
         } else if (strcmp(token, "show_asset") == 0 || strcmp(token, "sa") == 0) {
             char AID[4];
             scanf("%s", AID);
-            showAsset(AID, ASIP, ASport);
+            showAsset(AID, ASIP, Asport);
 
         } else if (strcmp(token, "bid") == 0 || strcmp(token, "b") == 0) {
             char AID[4];
-            char value[MAX_BUFFER_SIZE];
+            char value[MAX_BID_SIZE];
             scanf("%s %s", AID, value);
-            bid(UID, password, AID, value, ASIP , ASport);
+            bid(UID, password, AID, value, ASIP , Asport);
 
         } else if (strcmp(token, "show_record") == 0 || strcmp(token, "sr") == 0) {
             char AID[4];
             scanf("%s", AID);
-            showRecord(AID, ASIP, ASport);
+            showRecord(AID, ASIP, Asport);
 
         } else if (strcmp(token, "logout") == 0){
             if(presentLoginCredentials == 0){
                 printf("Please Login First.\nIf not able, use CTRL+C or CTRL+Z\n");
             } else {
-                presentLoginCredentials = logout(UID, password, ASIP, ASport);
+                presentLoginCredentials = logout(UID, password, ASIP, Asport);
                 if(presentLoginCredentials == 0){
                     memset(&UID, 0, sizeof(UID));
                     memset(&password, 0, sizeof(password));
@@ -156,7 +155,7 @@ int main(int argc, char *argv[]) {
             if(presentLoginCredentials == 0){
                 printf("Please Login First\n");
             } else {
-                presentLoginCredentials = unregister(UID, password, ASIP, ASport);
+                presentLoginCredentials = unregister(UID, password, ASIP, Asport);
                 if(presentLoginCredentials == 0){
                     memset(&UID, 0, sizeof(UID));
                     memset(&password, 0, sizeof(password));
@@ -177,7 +176,7 @@ int main(int argc, char *argv[]) {
     return 0;    
 }
 
-int UDPMessage(const char* message, char* reply, char* ASPort, char* ASIP) {
+int UDPMessage(const char* udpRequestBuffer, char* udpReplyBuffer, const char* ASIP, const char* Asport) {
     int fd, errcode;
     socklen_t addrlen;
     struct addrinfo hints, *res;
@@ -199,23 +198,24 @@ int UDPMessage(const char* message, char* reply, char* ASPort, char* ASIP) {
     hints.ai_family = AF_INET;      // IPv4
     hints.ai_socktype = SOCK_DGRAM; // UDP socket
 
-    errcode = getaddrinfo(ASIP, ASPort, &hints, &res);
+    errcode = getaddrinfo(ASIP, Asport, &hints, &res);
     if (errcode != 0) {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(errcode));
         close(fd);
         return -1;
     }
 
-    if (sendto(fd, message, strlen(message), 0, res->ai_addr, res->ai_addrlen) != -1) {
-        ssize_t received = recvfrom(fd, reply, MAX_BUFFER_SIZE, 0, (struct sockaddr *)&addr, &addrlen);
+    if (sendto(fd, udpRequestBuffer, strlen(udpRequestBuffer), 0, res->ai_addr, res->ai_addrlen) != -1) {
+        ssize_t received = recvfrom(fd, udpReplyBuffer, MAX_UDP_REPLY_BUFFER_SIZE, 0, (struct sockaddr *)&addr, &addrlen);
         if (received > 0) {
-            char* newline_pos = strchr(reply, '\n');
+            char* newline_pos = strchr(udpReplyBuffer, '\n');
             if (newline_pos != NULL) {
                 newline_pos++;
                 *newline_pos = '\0';
             }
             freeaddrinfo(res);
             close(fd);
+            printf("[UDP] received: %s\n", udpReplyBuffer); //TODO: DEBUGGING
             return received; // Return the number of bytes read
         } else if (received == -1 && errno == EWOULDBLOCK) {
             fprintf(stderr, "Timeout waiting for response\n");
@@ -224,7 +224,8 @@ int UDPMessage(const char* message, char* reply, char* ASPort, char* ASIP) {
     return -1;
 }
 
-int TCPMessage(const char* message, char* reply, char* ASPort, char* ASIP, int size) {
+int TCPMessage(const char* tcpRequestBuffer, char* tcpReplyBuffer, const char* ASIP, const char* Asport, int size) {
+    
     int tcpSocket, errcode;
     ssize_t n;
     struct addrinfo hints, *res;
@@ -254,7 +255,7 @@ int TCPMessage(const char* message, char* reply, char* ASPort, char* ASIP, int s
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM; // TCP socket
 
-    errcode = getaddrinfo(ASIP, ASPort, &hints, &res);
+    errcode = getaddrinfo(ASIP, Asport, &hints, &res);
     if (errcode != 0) {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(errcode));
         close(tcpSocket);
@@ -269,11 +270,11 @@ int TCPMessage(const char* message, char* reply, char* ASPort, char* ASIP, int s
         return -1;
     }
 
-    size_t toWrite = strlen(message)+size;
+    size_t toWrite = strlen(tcpRequestBuffer)+size;
     size_t written = 0;
     while (written < toWrite) {
         errno = 0;  // Reset errno before the call to write
-        ssize_t n = write(tcpSocket, message + written, toWrite - written);
+        ssize_t n = write(tcpSocket, tcpRequestBuffer + written, toWrite - written);
         if (n <= 0) {
             if (errno == EWOULDBLOCK) {
                 fprintf(stderr, "Timeout occurred during write\n");
@@ -290,7 +291,7 @@ int TCPMessage(const char* message, char* reply, char* ASPort, char* ASIP, int s
     size_t alreadyRead = 0;
     while (1) {
         errno = 0;  // Reset errno before the call to read
-        ssize_t n = read(tcpSocket, reply + alreadyRead, 1 * sizeof(char));
+        ssize_t n = read(tcpSocket, tcpReplyBuffer + alreadyRead, 1 * sizeof(char));
         if (n <= 0) {
             if (errno == EWOULDBLOCK) {
                 fprintf(stderr, "Timeout occurred during read\n");
@@ -303,54 +304,55 @@ int TCPMessage(const char* message, char* reply, char* ASPort, char* ASIP, int s
         }
         alreadyRead += (size_t)n;
 
-        if (reply[alreadyRead - 1] == '\n') {
+        if (tcpReplyBuffer[alreadyRead - 1] == '\n') {
             break;
-        } else if (alreadyRead >= MAX_BUFFER_SIZE + 1) {
+        } else if (alreadyRead >= MAX_TCP_REPLY_BUFFER_SIZE + 1) {
             perror("read");
             freeaddrinfo(res);
             close(tcpSocket);
             return -1;
         }
     }
-    reply[alreadyRead - 1] = '\0';
-
+    tcpReplyBuffer[alreadyRead - 1] = '\0';
+    printf("[TCP] received: %s\n", tcpReplyBuffer); //TODO: DEBUGGING
     freeaddrinfo(res);
     close(tcpSocket);
     return (ssize_t)alreadyRead; // Return the number of bytes read
 }
 
 // User Actions Functions
-int login(char* UID, char* password, char* ASIP, char* ASPort) {
-    char loginMessage[MAX_BUFFER_SIZE];
-    snprintf(loginMessage, sizeof(loginMessage), "LIN %s %s\n", UID, password);
+int login(char* UID, char* password, const char* ASIP, const char* Asport) {
+    char udpRequestBuffer[MAX_UDP_REQUEST_BUFFER_SIZE];
+    char udpReplyBuffer[MAX_UDP_REPLY_BUFFER_SIZE];
 
-    //envia mensagem
-    char reply[MAX_BUFFER_SIZE];
-    int n = UDPMessage(loginMessage, reply, ASPort, ASIP);
+    snprintf(udpRequestBuffer, sizeof(udpRequestBuffer), "LIN %s %s\n", UID, password);
+    int n = UDPMessage(udpRequestBuffer, udpReplyBuffer, ASIP, Asport);
+
     if (n == -1){
         printf("Error sending message\n");
         return -1;
     }
 
     // Process reply and display results
-    if(strcmp(reply, "RLI OK\n") == 0){
+    if(strcmp(udpReplyBuffer, "RLI OK\n") == 0){
         printf("Login Result: Successful!\n");
         return 0;
-    } else if (strcmp(reply, "RLI NOK\n") == 0){
+    } else if (strcmp(udpReplyBuffer, "RLI NOK\n") == 0){
         printf("Login Result: Unsuccessful :(\n");
         return 1;
-    } else if(strcmp(reply, "RLI REG\n") == 0){
+    } else if(strcmp(udpReplyBuffer, "RLI REG\n") == 0){
         printf("Login Result: User Registered!\n");
         return 0;
     } else {
-        printf("Unexpected reply: %s\n", reply);
+        printf("Unexpected reply: %s\n", udpReplyBuffer);
         return 1;
     }
 }
 
-void openAuction(char* UID, char* password, char* name, char* asset_fname, char* start_value, char* timeactive, char* ASIP, char* ASPort) {
-    //char openAuctionMessage[MAX_BUFFER_SIZE];
-
+void openAuction(char* UID, char* password, char* name, char* asset_fname, char* start_value, char* timeactive, const char* ASIP, const char* Asport) {
+    char tcpRequestBuffer[MAX_TCP_REQUEST_BUFFER_SIZE];
+    char tcpReplyBuffer[MAX_TCP_REPLY_BUFFER_SIZE];
+    printf("ASIP: %s\n", ASIP);
     // Open the file containing the asset
     FILE* assetFile = fopen(asset_fname, "rb");
     if (!assetFile) {
@@ -363,8 +365,6 @@ void openAuction(char* UID, char* password, char* name, char* asset_fname, char*
     long int fsize = ftell(assetFile);
     fseek(assetFile, 0, SEEK_SET);
     fclose(assetFile);
-
-    char openAuctionMessage[MAX_BUFFER_SIZE+fsize];
     
     char *fileData = readFile(asset_fname);
     if (fileData == NULL) {
@@ -372,24 +372,21 @@ void openAuction(char* UID, char* password, char* name, char* asset_fname, char*
         return;
     }
 
-    snprintf(openAuctionMessage, sizeof(openAuctionMessage), "OPA %s %s %s %s %s %s %ld %s\n", UID, password, name, start_value, timeactive, asset_fname, fsize, fileData);
-
-    // Send open auction message
-    char reply[MAX_BUFFER_SIZE];
-    TCPMessage(openAuctionMessage, reply, ASPort, ASIP, fsize);
+    snprintf(tcpRequestBuffer, sizeof(tcpRequestBuffer), "OPA %s %s %s %s %s %s %ld %s\n", UID, password, name, start_value, timeactive, asset_fname, fsize, fileData);
+    TCPMessage(tcpRequestBuffer, tcpReplyBuffer, ASIP, Asport, fsize);
 
     // Process reply and display results
-    if (strncmp(reply, "ROA OK", 6) == 0) {
+    if (strncmp(tcpReplyBuffer, "ROA OK", 6) == 0) {
         // Auction opened successfully
         int AID;
-        sscanf(reply + 7, "%d", &AID);
+        sscanf(tcpReplyBuffer + 7, "%d", &AID);
         printf("Auction opened successfully! Auction ID: %d\n", AID);
-    } else if (strncmp(reply, "ROA NOK", 7) == 0) {
+    } else if (strncmp(tcpReplyBuffer, "ROA NOK", 7) == 0) {
         printf("Error opening auction.\n");
-    } else if (strncmp(reply, "ROA NLG", 7) == 0) {
+    } else if (strncmp(tcpReplyBuffer, "ROA NLG", 7) == 0) {
         printf("Error: User not logged in.\n");
     }else {
-        printf("Unexpected reply: %s\n", reply);
+        printf("Unexpected reply: %s\n", tcpReplyBuffer);
     }
 }
 
@@ -425,31 +422,29 @@ char *readFile(const char *filename) {
     return buffer;
 }
 
-void closeAuction(char* UID, char* password, char* AID, char* ASIP, char* ASPort) {
-    // Prepare close auction message
-    char closeAuctionMessage[MAX_BUFFER_SIZE];
-    snprintf(closeAuctionMessage, sizeof(closeAuctionMessage), "CLS %s %s %s\n", UID, password, AID);
-
-    // Send close auction message
-    char reply[MAX_BUFFER_SIZE];
-    TCPMessage(closeAuctionMessage, reply, ASPort, ASIP, 0);
+void closeAuction(char* UID, char* password, char* AID, const char* ASIP, const char* Asport) {
+    char tcpRequestBuffer[MAX_TCP_REQUEST_BUFFER_SIZE];
+    char tcpReplyBuffer[MAX_TCP_REPLY_BUFFER_SIZE];
+    
+    snprintf(tcpRequestBuffer, sizeof(tcpRequestBuffer), "CLS %s %s %s\n", UID, password, AID);
+    TCPMessage(tcpRequestBuffer, tcpReplyBuffer, ASIP, Asport, 0);
 
     // Process reply and display results
-    if (strncmp(reply, "RCL OK", 6) == 0) {
+    if (strncmp(tcpReplyBuffer, "RCL OK", 6) == 0) {
         printf("Auction closed successfully!\n");
-    } else if (strncmp(reply, "RCL NLG", 7) == 0) {
+    } else if (strncmp(tcpReplyBuffer, "RCL NLG", 7) == 0) {
         printf("Error: User not logged in.\n");
-    } else if (strncmp(reply, "RCL EAU", 7) == 0) {
+    } else if (strncmp(tcpReplyBuffer, "RCL EAU", 7) == 0) {
         printf("Error: Auction %s does not exist.\n", AID);
-    } else if (strncmp(reply, "RCL EOW", 7) == 0) {
+    } else if (strncmp(tcpReplyBuffer, "RCL EOW", 7) == 0) {
         printf("Error: Auction %s is not owned by user %s.\n", AID, UID);
-    } else if (strncmp(reply, "RCL END", 7) == 0) {
+    } else if (strncmp(tcpReplyBuffer, "RCL END", 7) == 0) {
         printf("Error: Auction %s owned by user %s has already finished.\n", AID, UID);
     }
 }
 
 //function used on mb, ma and l to parse their input
-char (*parsePairs(const char *reply, char pairs[1998][4]))[4] {
+char (*parsePairs(const char *reply, char pairs[1998][4]))[4] {//TODO: declare uo top
     // Remove newline character from input
     char *mutableReply = strdup(reply);
     mutableReply[strcspn(mutableReply, "\n")] = '\0';
@@ -487,21 +482,21 @@ char (*parsePairs(const char *reply, char pairs[1998][4]))[4] {
     return pairs;
 }
 
-void myAuctions(char* UID, char* ASIP, char* ASPort) {
-    char message[MAX_BUFFER_SIZE];
-    snprintf(message, sizeof(message), "LMA %s\n", UID);
+void myAuctions(char* UID, const char* ASIP, const char* Asport) {
+    char udpRequestBuffer[MAX_UDP_REQUEST_BUFFER_SIZE];
+    char udpReplyBuffer[MAX_UDP_REPLY_BUFFER_SIZE];
 
-    char reply[MAX_BUFFER_SIZE];
-    UDPMessage(message, reply, ASPort, ASIP);
+    snprintf(udpRequestBuffer, sizeof(udpRequestBuffer), "LMA %s\n", UID);
+    UDPMessage(udpRequestBuffer, udpReplyBuffer, ASIP, Asport);
 
     // Process reply and display results
-    if (strcmp(reply, "RMA NOK\n") == 0){
+    if (strcmp(udpReplyBuffer, "RMA NOK\n") == 0){
         printf("%s has no auctions\n", UID);
-    } else if(strcmp(reply, "RMA NLG\n") == 0){
+    } else if(strcmp(udpReplyBuffer, "RMA NLG\n") == 0){
         printf("%s is not logged in.\n", UID);
     } else {
         char pairs[1998][4];
-        char (*result)[4] = parsePairs(reply, pairs);
+        char (*result)[4] = parsePairs(udpReplyBuffer, pairs);
 
         printf("%s's Auctions:\n", UID);
         for (int i = 0; i < 1998 && result[i][0] != '\0'; i += 2) {
@@ -514,21 +509,21 @@ void myAuctions(char* UID, char* ASIP, char* ASPort) {
     }
 }
 
-void myBids(char* UID, char* ASIP, char* ASPort) {
-    char message[MAX_BUFFER_SIZE];
-    snprintf(message, sizeof(message), "LMB %s\n", UID);
+void myBids(char* UID, const char* ASIP, const char* Asport) {
+    char udpRequestBuffer[MAX_UDP_REQUEST_BUFFER_SIZE];
+    char udpReplyBuffer[MAX_UDP_REPLY_BUFFER_SIZE];
 
-    char reply[MAX_BUFFER_SIZE];
-    UDPMessage(message, reply, ASPort, ASIP);
+    snprintf(udpRequestBuffer, sizeof(udpRequestBuffer), "LMB %s\n", UID);
+    UDPMessage(udpRequestBuffer, udpReplyBuffer, ASIP, Asport);
 
     // Process reply and display results
-    if (strcmp(reply, "RMB NOK\n") == 0){
+    if (strcmp(udpReplyBuffer, "RMB NOK\n") == 0){
         printf("%s has no bids.\n", UID);
-    } else if(strcmp(reply, "RMB NLG\n") == 0){
+    } else if(strcmp(udpReplyBuffer, "RMB NLG\n") == 0){
         printf("%s is not logged in.\n", UID);
     } else {
         char pairs[1998][4];
-        char (*result)[4] = parsePairs(reply, pairs);
+        char (*result)[4] = parsePairs(udpReplyBuffer, pairs);
 
         printf("%s's Bids:\n", UID);
         for (int i = 0; i < 1998 && result[i][0] != '\0'; i += 2) {
@@ -541,20 +536,19 @@ void myBids(char* UID, char* ASIP, char* ASPort) {
     }
 }
 
-void listAuctions(char* ASIP, char* ASPort) {
-    char message[MAX_BUFFER_SIZE];
-    snprintf(message, sizeof(message), "LST\n");
+void listAuctions(const char* ASIP, const char* Asport) {
+    char udpRequestBuffer[MAX_UDP_REQUEST_BUFFER_SIZE];
+    char udpReplyBuffer[MAX_UDP_REPLY_BUFFER_SIZE];
 
-    //envia mensagem
-    char reply[MAX_BUFFER_SIZE];
-    UDPMessage(message, reply, ASPort, ASIP);
+    snprintf(udpRequestBuffer, sizeof(udpRequestBuffer), "LST\n");
+    UDPMessage(udpRequestBuffer, udpReplyBuffer, ASIP, Asport);
 
     // Process reply and display results
-    if(strcmp(reply, "RLS NOK\n") == 0){
+    if(strcmp(udpReplyBuffer, "RLS NOK\n") == 0){
         printf("No auctions have been started.\n");
     } else {
         char pairs[1998][4];
-        char (*result)[4] = parsePairs(reply, pairs);
+        char (*result)[4] = parsePairs(udpReplyBuffer, pairs);
         printf("All Auctions:\n"); //TODO: better description
         for (int i = 0; i < 1998 && result[i][0] != '\0'; i += 2) {
             if(strcmp(result[i + 1],"1")==0){
@@ -566,18 +560,17 @@ void listAuctions(char* ASIP, char* ASPort) {
     }
 }
 
-void showAsset(char* AID, char* ASIP, char* ASPort) {
-    // Prepare show asset message
-    char showAssetMessage[MAX_BUFFER_SIZE];
-    snprintf(showAssetMessage, sizeof(showAssetMessage), "SAS %s\n", AID);
+void showAsset(char* AID, const char* ASIP, const char* Asport) {
+    char tcpRequestBuffer[MAX_TCP_REQUEST_BUFFER_SIZE];
+    char tcpReplyBuffer[MAX_TCP_REPLY_BUFFER_SIZE];
 
-    char reply[MAX_BUFFER_SIZE];
-    TCPMessage(showAssetMessage, reply, ASPort, ASIP, 0);
+    snprintf(tcpRequestBuffer, sizeof(tcpRequestBuffer), "SAS %s\n", AID);
+    TCPMessage(tcpRequestBuffer, tcpReplyBuffer, ASIP, Asport, 0);
 
     // Process reply and display results
-    if (strncmp(reply, "RSA OK", 6) == 0) {
+    if (strncmp(tcpReplyBuffer, "RSA OK", 6) == 0) {
         // Asset received successfully
-        char* token = strtok(reply + 7, " ");
+        char* token = strtok(tcpReplyBuffer + 7, " ");
         char* fname = token;
         token = strtok(NULL, " ");
         char* fsize = token;
@@ -590,49 +583,48 @@ void showAsset(char* AID, char* ASIP, char* ASPort) {
         printf("File Data: %s\n", fdata);
         //TODO: Criar ficheiro local com o fdata
     } else {
-        printf("Show Asset Result: %s\n", reply);
+        printf("Show Asset Result: %s\n", tcpReplyBuffer);
     }
 }
 
-void bid(char* UID, char* password, char* AID, char* value, char* ASIP, char* ASPort) {
-    char bidMessage[MAX_BUFFER_SIZE];
-    snprintf(bidMessage, sizeof(bidMessage), "BID %s %s %s %s\n", UID, password, AID, value);
+void bid(char* UID, char* password, char* AID, char* value, const char* ASIP, const char* Asport) {
+    char tcpRequestBuffer[MAX_TCP_REQUEST_BUFFER_SIZE];
+    char tcpReplyBuffer[MAX_TCP_REPLY_BUFFER_SIZE];
 
-    char reply[MAX_BUFFER_SIZE];
-    TCPMessage(bidMessage, reply, ASPort, ASIP, 0);
+    snprintf(tcpRequestBuffer, sizeof(tcpRequestBuffer), "BID %s %s %s %s\n", UID, password, AID, value);
+    TCPMessage(tcpRequestBuffer, tcpReplyBuffer, ASIP, Asport, 0);
 
     // Process reply and display results
-    if (strncmp(reply, "RBD ACC", 7) == 0) {
+    if (strncmp(tcpReplyBuffer, "RBD ACC", 7) == 0) {
         printf("Bid accepted!\n");
-    } else if (strncmp(reply, "RBD REF", 7) == 0) {
+    } else if (strncmp(tcpReplyBuffer, "RBD REF", 7) == 0) {
         printf("Bid refused: A larger bid has already been placed.\n");
-    } else if (strncmp(reply, "RBD NOK", 7) == 0) {
+    } else if (strncmp(tcpReplyBuffer, "RBD NOK", 7) == 0) {
         printf("Bid refused: Auction is not active.\n");
-    } else if (strncmp(reply, "RBD NLG", 7) == 0) {
+    } else if (strncmp(tcpReplyBuffer, "RBD NLG", 7) == 0) {
         printf("Error: User not logged in.\n");
-    } else if (strncmp(reply, "RBD ILG", 7) == 0) {
+    } else if (strncmp(tcpReplyBuffer, "RBD ILG", 7) == 0) {
         printf("Error: User cannot bid in an auction hosted by themselves.\n");
     }else {
-        printf("Unexpected reply: %s\n", reply);
+        printf("Unexpected reply: %s\n", tcpReplyBuffer);
     }
 }
 
 
-void showRecord(char* AID, char* ASIP, char* ASPort) {
-    char message[MAX_BUFFER_SIZE];
-    snprintf(message, sizeof(message), "SRC %s\n", AID);
+void showRecord(char* AID, const char* ASIP, const char* Asport) {
+    char udpRequestBuffer[MAX_UDP_REQUEST_BUFFER_SIZE];
+    char udpReplyBuffer[MAX_UDP_REPLY_BUFFER_SIZE];
 
-    printf("%s", message);
+    snprintf(udpRequestBuffer, sizeof(udpRequestBuffer), "SRC %s\n", AID);
+    printf("%s", udpRequestBuffer);
 
-    //envia mensagem
-    char reply[MAX_BUFFER_SIZE];
-    UDPMessage(message, reply, ASPort, ASIP);
+    UDPMessage(udpRequestBuffer, udpReplyBuffer, ASIP, Asport);
 
     // Process reply and display results
-    if(strcmp(reply, "RRC NOK\n") == 0){
+    if(strcmp(udpReplyBuffer, "RRC NOK\n") == 0){
         printf("The auction %s does not exist\n", AID);
     } else {
-        printf("Show record %s result: %s", AID, reply); //TODO: more human friendly
+        printf("Show record %s result: %s", AID, udpReplyBuffer); //TODO: more human friendly
         // Delimiter characters
         const char *delimiters = "BE";
 
@@ -641,7 +633,7 @@ void showRecord(char* AID, char* ASIP, char* ASPort) {
         char end_date[100], end_time[100], end_sec_time[100];
 
         // Tokenize the string
-        char *token = strtok(reply, delimiters);
+        char *token = strtok(udpReplyBuffer, delimiters);
 
         // Process and print tokens
         while (token != NULL) {
@@ -661,22 +653,21 @@ void showRecord(char* AID, char* ASIP, char* ASPort) {
     }
 }
 
-int logout(char* UID, char* password, char* ASIP, char* ASPort) {
-    char message[MAX_BUFFER_SIZE];
-    snprintf(message, sizeof(message), "LOU %s %s\n", UID, password);
+int logout(char* UID, char* password, const char* ASIP, const char* Asport) {
+    char udpRequestBuffer[MAX_UDP_REQUEST_BUFFER_SIZE];
+    char udpReplyBuffer[MAX_UDP_REPLY_BUFFER_SIZE];
 
-    //envia mensagem
-    char reply[MAX_BUFFER_SIZE];
-    UDPMessage(message, reply, ASPort, ASIP);
+    snprintf(udpRequestBuffer, sizeof(udpRequestBuffer), "LOU %s %s\n", UID, password);
+    UDPMessage(udpRequestBuffer, udpReplyBuffer, ASIP, Asport);
 
     // Process reply and display results
-    if(strcmp(reply, "RLO OK\n") == 0){
+    if(strcmp(udpReplyBuffer, "RLO OK\n") == 0){
         printf("Logout Result: Successful!\n");
         return 0;
-    } else if (strcmp(reply, "RLO NOK\n") == 0){
+    } else if (strcmp(udpReplyBuffer, "RLO NOK\n") == 0){
         printf("Logout Result: Unsuccessful, user is not logged in\n");
         return 0;
-    } else if(strcmp(reply, "RLO UNR\n") == 0){
+    } else if(strcmp(udpReplyBuffer, "RLO UNR\n") == 0){
         printf("Logout Result: Unrecognized user\n");//TODO: please log in again & por return 0 e apagar credenciais do main?
         return 1;
     }
@@ -684,22 +675,21 @@ int logout(char* UID, char* password, char* ASIP, char* ASPort) {
     return -1;
 }
 
-int unregister(char* UID, char* password, char* ASIP, char* ASPort) {
-    char message[MAX_BUFFER_SIZE];
-    snprintf(message, sizeof(message), "UNR %s %s\n", UID, password);
+int unregister(char* UID, char* password, const char* ASIP, const char* Asport) {
+    char udpRequestBuffer[MAX_UDP_REQUEST_BUFFER_SIZE];
+    char udpReplyBuffer[MAX_UDP_REPLY_BUFFER_SIZE];
 
-    //envia mensagem
-    char reply[MAX_BUFFER_SIZE];
-    UDPMessage(message, reply, ASPort, ASIP);
+    snprintf(udpRequestBuffer, sizeof(udpRequestBuffer), "UNR %s %s\n", UID, password);
+    UDPMessage(udpRequestBuffer, udpReplyBuffer, ASIP, Asport);
 
     // Process reply and display results
-    if(strcmp(reply, "RUR OK\n") == 0){
+    if(strcmp(udpReplyBuffer, "RUR OK\n") == 0){
         printf("Unregister Result: Successful!\n");
         return 0;
-    } else if (strcmp(reply, "RUR NOK\n") == 0){
+    } else if (strcmp(udpReplyBuffer, "RUR NOK\n") == 0){
         printf("Unregister Result: Unsuccessful, user is not logged in\n");
         return 0;
-    } else if(strcmp(reply, "RUR UNR\n") == 0){
+    } else if(strcmp(udpReplyBuffer, "RUR UNR\n") == 0){
         printf("Unregister Result: Unrecognized user\n");//TODO: please log in again & por return 0 e apagar credenciais do main?
         return 1;
     }
