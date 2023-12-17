@@ -132,7 +132,7 @@ int main(int argc, char *argv[]) {
             if(presentLoginCredentials == 0){
                 break; // Exit the loop and end the program
             } else {
-                printf("User is logged in. Please log out first.\n");
+                printf("User is logged in. Please log out first.\n"); //TODO: what about if server has shut down?
             }
 
         } else {
@@ -182,6 +182,7 @@ int UDPMessage(const char* udpRequestBuffer, char* udpReplyBuffer, const char* A
             }
             freeaddrinfo(res);
             close(fd);
+            printf("[UDP] received: %s\n", udpReplyBuffer); //TODO: DEBUGGING
             return received; // Return the number of bytes read
         } else if (received == -1 && errno == EWOULDBLOCK) {
             fprintf(stderr, "Timeout waiting for response\n");
@@ -280,6 +281,7 @@ int TCPMessage(const char* tcpRequestBuffer, char* tcpReplyBuffer, const char* A
         }
     }
     tcpReplyBuffer[alreadyRead - 1] = '\0';
+    printf("[TCP] received: %s\n", tcpReplyBuffer); //TODO: DEBUGGING
     freeaddrinfo(res);
     close(tcpSocket);
     return (ssize_t)alreadyRead; // Return the number of bytes read
@@ -411,7 +413,7 @@ void closeAuction(char* UID, char* password, char* AID, const char* ASIP, const 
 }
 
 //function used on mb, ma and l to parse their input
-char (*parsePairs(const char *reply, char pairs[1998][4]))[4] {
+char (*parsePairs(const char *reply, char pairs[1998][4]))[4] {//TODO: declare uo top
     // Remove newline character from input
     char *mutableReply = strdup(reply);
     mutableReply[strcspn(mutableReply, "\n")] = '\0';
@@ -522,7 +524,7 @@ void listAuctions(const char* ASIP, const char* Asport) {
     } else {
         char pairs[1998][4];
         char (*result)[4] = parsePairs(udpReplyBuffer, pairs);
-        printf("All Auctions:\n");
+        printf("All Auctions:\n"); //TODO: better description
         for (int i = 0; i < 1998 && result[i][0] != '\0'; i += 2) {
             if(strcmp(result[i + 1],"1")==0){
                 printf("Auction %s is active\n", result[i]);
@@ -612,7 +614,7 @@ void showRecord(char* AID, const char* ASIP, const char* Asport) {
     if(strcmp(udpReplyBuffer, "RRC NOK\n") == 0){
         printf("The auction %s does not exist\n", AID);
     } else {
-        printf("Show record %s result: %s", AID, udpReplyBuffer);
+        printf("Show record %s result: %s", AID, udpReplyBuffer); //TODO: more human friendly
         // Delimiter characters
         const char *delimiters = "BE";
 
@@ -622,7 +624,7 @@ void showRecord(char* AID, const char* ASIP, const char* Asport) {
 
         // Tokenize the string
         sscanf(udpReplyBuffer, "RRC OK %s %s %s %s %s %s %s", host_UID, auction_name, asset_fname, start_value, start_date, start_time, timeactive);
-        char first_part[200], second_part[MAX_TCP_REPLY_BUFFER_SIZE];
+        char first_part[MAX_TCP_REPLY_BUFFER_SIZE], second_part[MAX_TCP_REPLY_BUFFER_SIZE];
         sprintf(first_part, "RRC OK %s %s %s %s %s %s %s", host_UID, auction_name, asset_fname, start_value, start_date, start_time, timeactive);
         printf("AUCTION\n");
         printf("Host UID: %s\nAuction Name: %s\nAsset Name: %s\nStarting Value: %s\nStarting Date: %s\nStarting Time: %s\nTime Active: %s\n\n", host_UID, auction_name, asset_fname, start_value, start_date, start_time, timeactive);
@@ -659,7 +661,7 @@ int logout(char* UID, char* password, const char* ASIP, const char* Asport) {
         printf("Logout Result: Unsuccessful, user is not logged in\n");
         return 0;
     } else if(strcmp(udpReplyBuffer, "RLO UNR\n") == 0){
-        printf("Logout Result: Unrecognized user\n");
+        printf("Logout Result: Unrecognized user\n");//TODO: please log in again & por return 0 e apagar credenciais do main?
         return 1;
     }
 
@@ -681,7 +683,7 @@ int unregister(char* UID, char* password, const char* ASIP, const char* Asport) 
         printf("Unregister Result: Unsuccessful, user is not logged in\n");
         return 0;
     } else if(strcmp(udpReplyBuffer, "RUR UNR\n") == 0){
-        printf("Unregister Result: Unrecognized user\n");
+        printf("Unregister Result: Unrecognized user\n");//TODO: please log in again & por return 0 e apagar credenciais do main?
         return 1;
     }
     return -1;
