@@ -788,18 +788,15 @@ int auctionState(int AID) {
                 time_t now = time(NULL);
                 if (creationTime + timeactive < now) {
                     if (closeAuction(AID)  == -1) {
-                        printf("estou aqui 1\n");
                         return -1;
                     }
                     return 0;
                 }
             }else{
                 fclose(startFile);
-                printf("estou aqui 2\n");
                 return -1;
             }
         }else{
-            printf("estou aqui 3\n");
             return -1;
         }
     }
@@ -1214,9 +1211,7 @@ void handleListAuctionsRequest(char* response) {
             if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
                 char* AID_str = entry->d_name;
                 int AID = atoi(AID_str);
-                printf("AID: %d\n", AID);
                 int state = auctionState(AID);
-                printf("STATE: %d\n", state);
                 if(state == -1){
                     snprintf(response, MAX_UDP_REPLY_BUFFER_SIZE, "RLS NOK\n");
                     return;
@@ -1405,7 +1400,6 @@ void handleBidRequest(char* request, char* response) {
 void handleShowRecordRequest(char* request, char* response) {
     char* AID_str = strtok(request, " ");
     int AID = atoi(AID_str);
-    printf("AID: %d", AID);
 
     char auctionDir[50];
     snprintf(auctionDir, sizeof(auctionDir), "AS/AUCTIONS/%03d", AID); // MAX_AID_SIZE
