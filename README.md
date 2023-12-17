@@ -16,8 +16,6 @@ This project is a server-client application written in C. It allows users to int
 
 The `common.h` file in the `src/` directory contains several definitions that you can adjust to configure the behavior of the application.
 
-To change these values, simply open the `common.h` file in a text editor, make your changes, and then recompile the application using `make`.
-
 ## How to Run
 
 1. Compile the project using the provided Makefile: `make`
