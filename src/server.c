@@ -94,9 +94,7 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
-    //TODO: Confirm this stuff, temos mesmo de apanhar SIGPIPES e SIGCHLD, e decidir o que fazer com eles
-    //TODO: SIGPIPE signal will be ignored
-    //TODO: if the connection is lost and you write to the socket, the write will return -1 and errno will be set to EPIPE
+    // SIGPIPE & SIGCHILD signal will be ignored
     struct sigaction act; 
     memset(&act,0,sizeof act);
     act.sa_handler=SIG_IGN;
@@ -266,7 +264,6 @@ int handleUDPrequests(const char* Asport, int verbose) {
                 sprintf(udpReplyBuffer, "ERR\n"); 
             }
         }
-        printf("[UDP] Sending: %s\n", udpReplyBuffer); //TODO: DEBUGGING
         // Send the response to the client
         n = sendto(udpSocket, udpReplyBuffer, sizeof(udpReplyBuffer), 0, (struct sockaddr *)&addr, addrlen);
         if (n == -1) {
@@ -295,7 +292,6 @@ int handleTCPrequests(const char* Asport, int verbose){
         return -1;
     }
 
-    // TODO: check if this is needed...
     int yes = 1;
     if (setsockopt(tcpSocket, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1) {
         perror("setsockopt");
@@ -425,7 +421,6 @@ int handleTCPrequests(const char* Asport, int verbose){
                     sprintf(tcpReplyBuffer, "ERR\n"); 
                 }
             }
-            printf("[TCP] Sending: %s\n", tcpReplyBuffer); //TODO: DEBUGGING
             // Send the response to the client
             size_t toWrite = strlen(tcpReplyBuffer);
             size_t written = 0;
@@ -921,8 +916,6 @@ void handleOpenAuctionRequest(char *request, char *response) {
     (void)Fsize_str; // unused
     char *Fdata = strtok(NULL, "\n");
 
-    //TODO: assert correct sizes and formats MAX_FILENAME_SIZE, MAX_FSIZE_LEN, MAX_FSIZE_NUM
-
     (void)Fsize_str; // unused
     int start_value = atoi(start_value_str);
     int timeactive = atoi(timeactive_str);
@@ -1412,7 +1405,7 @@ void handleShowRecordRequest(char* request, char* response) {
         }
         int state = auctionState(AID);
         //if(state == 0){
-        if(state != 1){ //TODO o state aqui esta a dar sempre -1, mas só aqui not sure why mas assim está a funcionar
+        if(state != 1){
             char endFilePath[100];
             snprintf(endFilePath, sizeof(endFilePath), "%s/END.txt", auctionDir);
             if (fileExists(endFilePath)) {
