@@ -12,6 +12,12 @@ This project is a server-client application written in C. It allows users to int
   - `client.c`: This is the main client program. It sends requests to the server and processes responses.
   - `common.c`: This file contains functions and definitions that are common to both the server and client.
 
+## Configuration
+
+The `common.h` file in the `src/` directory contains several definitions that you can adjust to configure the behavior of the application.
+
+To change these values, simply open the `common.h` file in a text editor, make your changes, and then recompile the application using `make`.
+
 ## How to Run
 
 1. Compile the project using the provided Makefile: `make`
