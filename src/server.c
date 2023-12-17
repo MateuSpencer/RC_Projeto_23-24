@@ -1207,8 +1207,7 @@ void handleListAuctionsRequest(char* response) {
         struct dirent* entry;
         // Loop through the AUCTIONS directory
         while ((entry = readdir(DirPtr)) != NULL) {
-            //entry->d_type == DT_DIR && 
-            if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
+            if (entry->d_type == DT_DIR && strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
                 char* AID_str = entry->d_name;
                 int AID = atoi(AID_str);
                 int state = auctionState(AID);
