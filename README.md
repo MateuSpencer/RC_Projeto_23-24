@@ -9,6 +9,8 @@ This project is a server-client application written in C. It allows users to int
 - `DB/`: Contains the Auction Server (AS) files.
 - `src/`: Contains the source code files.
   - `server.c`: This is the main server program. It handles incoming connections and processes requests.
+    - Functions with "handle" are used to handle incoming requests
+    - There are also support functions, which are used to help the handlers
   - `client.c`: This is the main client program. It sends requests to the server and processes responses.
   - `common.c`: This file contains functions and definitions that are common to both the server and client.
 
