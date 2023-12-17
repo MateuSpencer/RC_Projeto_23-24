@@ -45,17 +45,17 @@ int newBid(int AID, int newBidValue);
 int auctionState(int AID);
 int closeAuction(int AID);
 
-void handleLoginRequest(char* request, char* response);
-void handleOpenAuctionRequest(char* request, char* response);
-void handleCloseAuctionRequest(char* request, char* response);
-void handleMyAuctionsRequest(char* request, char* response);
-void handleMyBidsRequest(char* request, char* response);
-void handleListAuctionsRequest(char* response);
-void handleShowAssetRequest(char* request, char* response);
-void handleBidRequest(char* request, char* response);
-void handleShowRecordRequest(char* request, char* response);
-void handleLogoutRequest(char* request, char* response);
-void handleUnregisterRequest(char* request, char* response);
+void handleLoginRequest(char* request, char* response, int verbose);
+void handleOpenAuctionRequest(char* request, char* response, int verbose);
+void handleCloseAuctionRequest(char* request, char* response, int verbose);
+void handleMyAuctionsRequest(char* request, char* response, int verbose);
+void handleMyBidsRequest(char* request, char* response, int verbose);
+void handleListAuctionsRequest(char* response, int verbose);
+void handleShowAssetRequest(char* request, char* response, int verbose);
+void handleBidRequest(char* request, char* response, int verbose);
+void handleShowRecordRequest(char* request, char* response, int verbose);
+void handleLogoutRequest(char* request, char* response, int verbose);
+void handleUnregisterRequest(char* request, char* response, int verbose);
 
 volatile sig_atomic_t terminationRequested = 0;
 
@@ -119,7 +119,7 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    printf("To Terminate use CTRL+C or CTRL+Z\n");
+    printf("\nTo Terminate use CTRL+C or CTRL+Z\n\n");
 
     // Create the DB, USERS, and AUCTIONS directories if they don't exist
     char dir[50];
@@ -198,11 +198,6 @@ int handleUDPrequests(const char* Asport, int verbose) {
     // Set up the address length
     addrlen = sizeof(addr);
 
-    // If verbose mode is on, print the listening port
-    if (verbose) {
-        printf("[UDP] Listening on port %s\n", Asport);
-    }
-
     // Main loop to handle incoming requests
     while (!terminationRequested) {
         fd_set readSet;
@@ -234,7 +229,7 @@ int handleUDPrequests(const char* Asport, int verbose) {
         udpRequestBuffer[n] = '\0';
 
         if(verbose == 1){
-            printf("[UDP] Received: %s\n", udpRequestBuffer);//TODO: a short description of the received requests (UID, type of request) and the IP and port originating those requests.
+            printf("[UDP] Received from IP: %s, Port: %d\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
         }
         
         if (udpRequestBuffer[n - 1] != '\n' || strlen(udpRequestBuffer) < MIN_UDP_REQUEST_BUFFER_SIZE) {
@@ -246,19 +241,19 @@ int handleUDPrequests(const char* Asport, int verbose) {
             char* data = strtok(NULL, "\n");
             // Handle the action
             if (strcmp(action, "LIN") == 0) {
-                handleLoginRequest(data, udpReplyBuffer);
+                handleLoginRequest(data, udpReplyBuffer, verbose);
             } else if (strcmp(action, "LMA") == 0) {
-                handleMyAuctionsRequest(data, udpReplyBuffer);
+                handleMyAuctionsRequest(data, udpReplyBuffer, verbose);
             } else if (strcmp(action, "LMB") == 0) {
-                handleMyBidsRequest(data, udpReplyBuffer);
+                handleMyBidsRequest(data, udpReplyBuffer, verbose);
             } else if (strcmp(action, "LST\n") == 0) {
-                handleListAuctionsRequest(udpReplyBuffer);
+                handleListAuctionsRequest(udpReplyBuffer, verbose);
             } else if (strcmp(action, "SRC") == 0) {
-                handleShowRecordRequest(data, udpReplyBuffer);
+                handleShowRecordRequest(data, udpReplyBuffer, verbose);
             } else if (strcmp(action, "LOU") == 0) {
-                handleLogoutRequest(data, udpReplyBuffer);
+                handleLogoutRequest(data, udpReplyBuffer, verbose);
             } else if (strcmp(action, "UNR") == 0) {
-                handleUnregisterRequest(data, udpReplyBuffer);
+                handleUnregisterRequest(data, udpReplyBuffer, verbose);
             } else {
                 // If the action is unknown, send an error response
                 sprintf(udpReplyBuffer, "ERR\n"); 
@@ -332,10 +327,6 @@ int handleTCPrequests(const char* Asport, int verbose){
     // Set up the address length
     addrlen = sizeof(addr);
 
-    if (verbose) {
-        printf("[TCP] Listening on port %s\n", Asport);
-    }
-
     // Main loop to handle incoming connections
     while (!terminationRequested) {
         fd_set readSet;
@@ -398,7 +389,7 @@ int handleTCPrequests(const char* Asport, int verbose){
             tcpRequestBuffer[alreadyRead] = '\0';
 
             if(verbose == 1){
-                printf("[TCP] Received: %s\n", tcpRequestBuffer);//TODO: a short description of the received requests (UID, type of request) and the IP and port originating those requests.
+                printf("[TCP] Received from IP: %s, Port: %d\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
             }
             if (tcpRequestBuffer[alreadyRead - 1] != '\n') {
                 // If the last character is not a newline or if the request is smaller than the minimum, send an error response
@@ -409,13 +400,13 @@ int handleTCPrequests(const char* Asport, int verbose){
                 char* data = strtok(NULL, "\n");
                 // Handle the action
                 if (strcmp(action, "OPA") == 0) {
-                    handleOpenAuctionRequest(data, tcpReplyBuffer);
+                    handleOpenAuctionRequest(data, tcpReplyBuffer, verbose);
                 } else if (strcmp(action, "CLS") == 0) {
-                    handleCloseAuctionRequest(data, tcpReplyBuffer);
+                    handleCloseAuctionRequest(data, tcpReplyBuffer, verbose);
                 } else if (strcmp(action, "SAS") == 0) {
-                    handleShowAssetRequest(data, tcpReplyBuffer);
+                    handleShowAssetRequest(data, tcpReplyBuffer, verbose);
                 } else if (strcmp(action, "BID") == 0) {
-                    handleBidRequest(data, tcpReplyBuffer);
+                    handleBidRequest(data, tcpReplyBuffer, verbose);
                 } else {
                     // If the action is unknown, send an error response
                     sprintf(tcpReplyBuffer, "ERR\n"); 
@@ -802,13 +793,17 @@ int closeAuction(int AID) {
 
 /* --------------------- HANDLER FUNCTIONS  -----------------------------------*/
 
-void handleLoginRequest(char* request, char* response) {
+void handleLoginRequest(char* request, char* response, int verbose) {
     char userDir[50];
     char filename[50];
     char filePath[100];
 
     char* UID = strtok(request, " ");
     char* password = strtok(NULL, " ");
+
+    if(verbose == 1){
+        printf("Login Request from: %s\n\n", UID);
+    }
 
     if(validateUserCredentialsFormating(UID, password) == -1){
         snprintf(response, MAX_UDP_REPLY_BUFFER_SIZE, "RLI NOK\n");
@@ -905,7 +900,7 @@ void handleLoginRequest(char* request, char* response) {
     }
 }
 
-void handleOpenAuctionRequest(char *request, char *response) {
+void handleOpenAuctionRequest(char *request, char *response, int verbose) {
     char *UID = strtok(request, " ");
     char *password = strtok(NULL, " ");
     char *name = strtok(NULL, " ");
@@ -916,9 +911,12 @@ void handleOpenAuctionRequest(char *request, char *response) {
     (void)Fsize_str; // unused
     char *Fdata = strtok(NULL, "\n");
 
-    (void)Fsize_str; // unused
     int start_value = atoi(start_value_str);
     int timeactive = atoi(timeactive_str);
+
+    if(verbose == 1){
+        printf("Open Auction  Request from: %s\n\n", UID);
+    }
 
     if(validateUserCredentialsFormating(UID, password) == -1){
         snprintf(response, MAX_TCP_REPLY_BUFFER_SIZE, "ROA NOK\n");
@@ -998,12 +996,16 @@ void handleOpenAuctionRequest(char *request, char *response) {
     }
 }
 
-void handleCloseAuctionRequest(char* request, char* response) {
+void handleCloseAuctionRequest(char* request, char* response, int verbose) {
     char* UID = strtok(request, " ");
     char* password = strtok(NULL, " ");
     char* AID_str = strtok(NULL, " ");
 
     int AID = atoi(AID_str);
+
+    if(verbose == 1){
+        printf("Close Auction Request from: %s\n\n", UID);
+    }
 
     if(validateUserCredentialsFormating(UID, password) == -1){
         snprintf(response, MAX_TCP_REPLY_BUFFER_SIZE, "RCL NOK\n");
@@ -1044,11 +1046,15 @@ void handleCloseAuctionRequest(char* request, char* response) {
     }
 }
 
-void handleMyAuctionsRequest(char* request, char* response) {
+void handleMyAuctionsRequest(char* request, char* response, int verbose) {
     char auctionString[10];
     int auctionCount = 0;
 
     char* UID = strtok(request, " ");
+
+    if(verbose == 1){
+        printf("My Auctions Request from: %s\n\n", UID);
+    }
 
     if (LoggedIn(UID)) {
         // Initialize response with "RMA OK"
@@ -1099,11 +1105,15 @@ void handleMyAuctionsRequest(char* request, char* response) {
     }
 }
 
-void handleMyBidsRequest(char* request, char* response) {
+void handleMyBidsRequest(char* request, char* response, int verbose) {
     char bidString[10];
     int bidCount = 0;
 
     char* UID = strtok(request, " ");
+
+    if(verbose == 1){
+        printf("My Bids Request from: %s\n\n", UID);
+    }
 
     if (LoggedIn(UID)) {
         // Initialize response with "RMB OK"
@@ -1148,9 +1158,13 @@ void handleMyBidsRequest(char* request, char* response) {
     }
 }
 
-void handleListAuctionsRequest(char* response) {
+void handleListAuctionsRequest(char* response, int verbose) {
     char auctionString[10];
     int auctionCount = 0;
+
+    if(verbose == 1){
+        printf("List Auctions Request \n\n");
+    }
 
     // Initialize response with "RLS OK"
     snprintf(response, MAX_UDP_REPLY_BUFFER_SIZE, "RLS OK");
@@ -1188,9 +1202,13 @@ void handleListAuctionsRequest(char* response) {
     }
 }
 
-void handleShowAssetRequest(char* request, char* response) {
+void handleShowAssetRequest(char* request, char* response, int verbose) {
     char* AID_str = strtok(request, " ");
     int AID = atoi(AID_str);
+
+    if(verbose == 1){
+        printf("Show Asset Request\n\n");
+    }
 
     char auctionDir[50];
     snprintf(auctionDir, sizeof(auctionDir), "DB/AUCTIONS/%03d", AID); // MAX_AID_SIZE
@@ -1242,7 +1260,7 @@ void handleShowAssetRequest(char* request, char* response) {
     }
 }
 
-void handleBidRequest(char* request, char* response) {
+void handleBidRequest(char* request, char* response, int verbose) {
     char* UID = strtok(request, " ");
     char* password = strtok(NULL, " ");
     char* AID_str = strtok(NULL, " ");
@@ -1250,6 +1268,10 @@ void handleBidRequest(char* request, char* response) {
 
     int AID = atoi(AID_str);
     int value = atoi(value_str);
+
+    if(verbose == 1){
+        printf("Bid Request from: %s\n\n", UID);
+    }
 
     if(validateUserCredentialsFormating(UID, password) == -1){
         snprintf(response, MAX_TCP_REPLY_BUFFER_SIZE, "ROA NOK\n");
@@ -1350,9 +1372,13 @@ void handleBidRequest(char* request, char* response) {
     }
 }
 
-void handleShowRecordRequest(char* request, char* response) {
+void handleShowRecordRequest(char* request, char* response, int verbose) {
     char* AID_str = strtok(request, " ");
     int AID = atoi(AID_str);
+
+    if(verbose == 1){
+        printf("Show Record Request\n\n");
+    }
 
     char auctionDir[50];
     snprintf(auctionDir, sizeof(auctionDir), "DB/AUCTIONS/%03d", AID); // MAX_AID_SIZE
@@ -1431,9 +1457,13 @@ void handleShowRecordRequest(char* request, char* response) {
     }
 }
 
-void handleLogoutRequest(char* request, char* response) {
+void handleLogoutRequest(char* request, char* response, int verbose) {
     char* UID = strtok(request, " ");
     char* password = strtok(NULL, " ");
+
+    if(verbose == 1){
+        printf("Logout Request from: %s\n\n", UID);
+    }
 
     if(validateUserCredentialsFormating(UID, password) == -1){
         snprintf(response, MAX_UDP_REPLY_BUFFER_SIZE, "RLO NOK\n");
@@ -1473,9 +1503,13 @@ void handleLogoutRequest(char* request, char* response) {
     }
 }
 
-void handleUnregisterRequest(char* request, char* response) {
+void handleUnregisterRequest(char* request, char* response, int verbose) {
     char* UID = strtok(request, " ");
     char* password = strtok(NULL, " ");
+
+    if(verbose == 1){
+        printf("Unregister Request from: %s\n\n", UID);
+    }
 
     if(validateUserCredentialsFormating(UID, password) == -1){
         snprintf(response, MAX_UDP_REPLY_BUFFER_SIZE, "RUR NOK\n");
