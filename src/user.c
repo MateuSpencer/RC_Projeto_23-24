@@ -656,15 +656,18 @@ void showRecord(char* AID, const char* ASIP, const char* Asport) {
         char end_date[100], end_time[100], end_sec_time[100];
 
         // Tokenize the string
-        char *token = strtok(udpReplyBuffer, delimiters);
+        sscanf(udpReplyBuffer, "RRC OK %s %s %s %s %s %s %s", host_UID, auction_name, asset_fname, start_value, start_date, start_time, timeactive);
+        char first_part[200], second_part[MAX_TCP_REPLY_BUFFER_SIZE];
+        sprintf(first_part, "RRC OK %s %s %s %s %s %s %s", host_UID, auction_name, asset_fname, start_value, start_date, start_time, timeactive);
+        printf("AUCTION\n");
+        printf("Host UID: %s\nAuction Name: %s\nAsset Name: %s\nStarting Value: %s\nStarting Date: %s\nStarting Time: %s\nTime Active: %s\n\n", host_UID, auction_name, asset_fname, start_value, start_date, start_time, timeactive);
+        strcpy(second_part, udpReplyBuffer + strlen(first_part));
+
+        char *token = strtok(second_part, delimiters);
 
         // Process and print tokens
         while (token != NULL) {
-            printf("Segment: %s\n", token);
-            if(sscanf(token, "RRC OK %s %s %s %s %s %s %s", host_UID, auction_name, asset_fname, start_value, start_date, start_time, timeactive) == 7){
-                printf("AUCTION\n");
-                printf("Host UID: %s\nAuction Name: %s\nAsset Name: %s\nStarting Value: %s\nStarting Date: %s\nStarting Time: %s\nTime Active: %s\n\n", host_UID, auction_name, asset_fname, start_value, start_date, start_time, timeactive);
-            } else if(sscanf(token, "%s %s %s %s %s", bidder_UID, bid_value, bid_date, bid_time, bid_sec_time) == 5){
+            if(sscanf(token, "%s %s %s %s %s", bidder_UID, bid_value, bid_date, bid_time, bid_sec_time) == 5){
                 printf("BID\n");
                 printf("Bidder UID: %s\nBid Value: %s\nBid Date: %s\nBid Time: %s\nBid Time in Seconds: %s\n\n", host_UID, bid_value, bid_date, bid_time, bid_sec_time);
             } else if(sscanf(token, "%s %s %s", end_date, end_time, end_sec_time) == 3){
