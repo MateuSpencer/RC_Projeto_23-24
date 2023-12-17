@@ -4,7 +4,7 @@ SOURCES_SERVER = src/server.c src/common.c
 SOURCES_USER = src/user.c src/common.c
 OBJECTS_SERVER = $(SOURCES_SERVER:src/%.c=src/%.o)
 OBJECTS_USER = $(SOURCES_USER:src/%.c=src/%.o)
-EXECUTABLE_SERVER = server
+EXECUTABLE_SERVER = AS
 EXECUTABLE_USER = user
 
 all: $(EXECUTABLE_SERVER) $(EXECUTABLE_USER)

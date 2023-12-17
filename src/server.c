@@ -16,50 +16,12 @@
 #include <signal.h>
 #include <ctype.h>
 
-// #include "common.h"
+#include "common.h"
 
 #define VALID_USER 0
 #define USER_NOT_EXIST 1
 #define INVALID_PASSWORD 2
 #define MISSING_PASSWORD 3
-
-#define MIN(a, b) ((a) < (b) ? (a) : (b))
-
-#define MAX_UDP_REQUEST_BUFFER_SIZE 21 //LIN / LOU
-#define MIN_UDP_REQUEST_BUFFER_SIZE 4 //LST
-#define MAX_UDP_REPLY_BUFFER_SIZE 6000 //TODO: what size limit?
-
-#define MAX_TCP_REQUEST_BUFFER_SIZE 4000 //TODO: what size limit? should be enough for the biggest file size allowed and the message - 10 MB+?
-#define MAX_TCP_REPLY_BUFFER_SIZE 4000 //TODO: what size limit? should be enough for the biggest file size allowed and the message - 10 MB+?
-
-#define UID_SIZE 6
-#define PASSWORD_SIZE 8
-#define MAX_BID_SIZE 6
-#define MAX_AID_SIZE 3
-#define MAX_FILENAME_SIZE 24
-#define MAX_FSIZE_LEN 8
-#define MAX_FSIZE_NUM 0xA00000 // 10 MB
-#define TIMEOUT 100000 //TODO: 5 seconds
-#define PATH_MAX 100
-#define MAX_TCP_CONNECTIONS 5
-
-int createUDPSocket() {
-    int udpSocket = socket(AF_INET, SOCK_DGRAM, 0);
-    if (udpSocket == -1) {
-        perror("UDP socket creation failed");
-        return-1;
-    }
-    return udpSocket;
-}
-
-int createTCPSocket() {
-    int tcpSocket = socket(AF_INET, SOCK_STREAM, 0);
-    if (tcpSocket == -1) {
-        perror("TCP socket creation failed");
-        return-1;
-    }
-    return tcpSocket;
-}
 
 int handleUDPrequests(const char* Asport, int verbose);
 int handleTCPrequests(const char* Asport, int verbose);
@@ -161,17 +123,17 @@ int main(int argc, char *argv[]) {
 
     printf("To Terminate use CTRL+C or CTRL+Z\n");
 
-    // Create the AS, USERS, and AUCTIONS directories if they don't exist
+    // Create the DB, USERS, and AUCTIONS directories if they don't exist
     char dir[50];
-    snprintf(dir, sizeof(dir), "AS");
+    snprintf(dir, sizeof(dir), "DB");
     if(createDirectory(dir) == -1){
         exit(EXIT_FAILURE);
     }
-    snprintf(dir, sizeof(dir), "AS/AUCTIONS");
+    snprintf(dir, sizeof(dir), "DB/AUCTIONS");
     if(createDirectory(dir) == -1){
         exit(EXIT_FAILURE);
     }
-    snprintf(dir, sizeof(dir), "AS/USERS");
+    snprintf(dir, sizeof(dir), "DB/USERS");
     if(createDirectory(dir) == -1){
         exit(EXIT_FAILURE);
     }
@@ -607,7 +569,7 @@ void getCurrentDateTime(char* dateTime) {
 // Helper function to check if the user is logged in
 bool LoggedIn(const char* UID) {
     char loginFile[50];
-    snprintf(loginFile, sizeof(loginFile), "AS/USERS/%s/%s_login.txt", UID, UID);
+    snprintf(loginFile, sizeof(loginFile), "DB/USERS/%s/%s_login.txt", UID, UID);
     // Check if the login file exists
     if (access(loginFile, F_OK) != -1) {
         return true;  // User is logged in
@@ -619,7 +581,7 @@ bool LoggedIn(const char* UID) {
 // Helper function to validate user existence and password
 int validateUser(const char* UID, const char* password) {
     char userDir[50];
-    snprintf(userDir, sizeof(userDir), "AS/USERS/%s", UID);
+    snprintf(userDir, sizeof(userDir), "DB/USERS/%s", UID);
     char filename[50];
     snprintf(filename, sizeof(filename), "%s_pass.txt", UID);
 
@@ -674,7 +636,7 @@ int validateUserCredentialsFormating(char* UID, char* password) {
 
 // Helper function to find the highest AID in the AUCTIONS directory and create a new directory for the next AID
 int newAIDdirectory() {
-    DIR *dir = opendir("AS/AUCTIONS");
+    DIR *dir = opendir("DB/AUCTIONS");
     struct dirent *entry;
     int highestAID = 0;
 
@@ -698,7 +660,7 @@ int newAIDdirectory() {
 
         // Create the directory for the next AID
         char auctionDir[50];
-        snprintf(auctionDir, sizeof(auctionDir), "AS/AUCTIONS/%03d", nextAID); // MAX_AID_SIZE
+        snprintf(auctionDir, sizeof(auctionDir), "DB/AUCTIONS/%03d", nextAID); // MAX_AID_SIZE
         if(createDirectory(auctionDir) == -1){
             closedir(dir);
             return -1;
@@ -714,7 +676,7 @@ int newAIDdirectory() {
 // Helper function to check if an auction with the given AID exists
 bool auctionExists(int AID) {
     char auctionDir[50];
-    snprintf(auctionDir, sizeof(auctionDir), "AS/AUCTIONS/%03d", AID); // MAX_AID_SIZE
+    snprintf(auctionDir, sizeof(auctionDir), "DB/AUCTIONS/%03d", AID); // MAX_AID_SIZE
 
     struct stat st;
     return stat(auctionDir, &st) == 0 && S_ISDIR(st.st_mode);
@@ -723,7 +685,7 @@ bool auctionExists(int AID) {
 // Helper function to check if an auction with the given AID is owned by the specified UID
 bool auctionOwnedByUser(int AID, const char* UID) {
     char hostedDir[50];
-    snprintf(hostedDir, sizeof(hostedDir), "AS/USERS/%s/HOSTED", UID);
+    snprintf(hostedDir, sizeof(hostedDir), "DB/USERS/%s/HOSTED", UID);
 
     char auctionFile[100];
     snprintf(auctionFile, sizeof(auctionFile), "%s/%03d.txt", hostedDir, AID); // MAX_AID_SIZE
@@ -734,7 +696,7 @@ bool auctionOwnedByUser(int AID, const char* UID) {
 // Helper function to create a new bid if possible
 int newBid(int AID, int newBidValue) {
     char bidsDir[50];
-    snprintf(bidsDir, sizeof(bidsDir), "AS/AUCTIONS/%03d/BIDS", AID); // MAX_AID_SIZE
+    snprintf(bidsDir, sizeof(bidsDir), "DB/AUCTIONS/%03d/BIDS", AID); // MAX_AID_SIZE
 
     DIR* dir = opendir(bidsDir);
     struct dirent* entry;
@@ -755,7 +717,7 @@ int newBid(int AID, int newBidValue) {
         if (newBidValue > highestBid) {
             // Create a new entry for the bid
             char bidFilePath[50];
-            snprintf(bidFilePath, sizeof(bidFilePath), "AS/AUCTIONS/%03d/BIDS", AID); // MAX_AID_SIZE
+            snprintf(bidFilePath, sizeof(bidFilePath), "DB/AUCTIONS/%03d/BIDS", AID); // MAX_AID_SIZE
             char bidFilename[50];
             snprintf(bidFilename, sizeof(bidFilename), "%06d.txt", newBidValue); // MAX_BID_SIZE
             return createFile(bidFilePath, bidFilename);
@@ -772,13 +734,13 @@ int newBid(int AID, int newBidValue) {
 // Helper function to check auction state and create END file if necessary
 int auctionState(int AID) {
     char endFilePath[100];
-    snprintf(endFilePath, sizeof(endFilePath), "AS/AUCTIONS/%03d/END.txt", AID); // MAX_AID_SIZE
+    snprintf(endFilePath, sizeof(endFilePath), "DB/AUCTIONS/%03d/END.txt", AID); // MAX_AID_SIZE
     if(access(endFilePath, F_OK) != -1){
         return 0; //END file exists
     }else{
         //Check if the total time of the auction has passed
         char startFilePath[100];
-        snprintf(startFilePath, sizeof(startFilePath), "AS/AUCTIONS/%03d/START.txt", AID); // MAX_AID_SIZE
+        snprintf(startFilePath, sizeof(startFilePath), "DB/AUCTIONS/%03d/START.txt", AID); // MAX_AID_SIZE
         FILE *startFile = fopen(startFilePath, "r");
         if (startFile != NULL) {
             int timeactive;
@@ -805,13 +767,13 @@ int auctionState(int AID) {
 
 int closeAuction(int AID) {
     char endFilePath[100];
-    snprintf(endFilePath, sizeof(endFilePath), "AS/AUCTIONS/%03d", AID); // MAX_AID_SIZE
+    snprintf(endFilePath, sizeof(endFilePath), "DB/AUCTIONS/%03d", AID); // MAX_AID_SIZE
     if(createFile(endFilePath, "END.txt") == -1){
         return -1;
     }
     //obtain the starting time from the START file
     char startFilePath[100];
-    snprintf(startFilePath, sizeof(startFilePath), "AS/AUCTIONS/%03d/START.txt", AID); // MAX_AID_SIZE
+    snprintf(startFilePath, sizeof(startFilePath), "DB/AUCTIONS/%03d/START.txt", AID); // MAX_AID_SIZE
     FILE *startFile = fopen(startFilePath, "r");
     if (startFile != NULL) {
         int timeactive;
@@ -828,7 +790,7 @@ int closeAuction(int AID) {
             getCurrentDateTime(currentDateTime);
             char content[50];
             snprintf(content, sizeof(content), "%s %d", currentDateTime, timeactive);
-            snprintf(endFilePath, sizeof(endFilePath), "AS/AUCTIONS/%03d/END.txt", AID); // MAX_AID_SIZE
+            snprintf(endFilePath, sizeof(endFilePath), "DB/AUCTIONS/%03d/END.txt", AID); // MAX_AID_SIZE
             if (writeFile(endFilePath, content) == -1) {
                 return -1;
             }
@@ -867,7 +829,7 @@ void handleLoginRequest(char* request, char* response) {
 
         if (validation == VALID_USER || validation == MISSING_PASSWORD) {
             // User Exists
-            snprintf(userDir, sizeof(userDir), "AS/USERS/%s", UID);
+            snprintf(userDir, sizeof(userDir), "DB/USERS/%s", UID);
             snprintf(filename, sizeof(filename), "%s_login.txt", UID);
             
             if(createFile(userDir, filename) == -1){
@@ -895,7 +857,7 @@ void handleLoginRequest(char* request, char* response) {
             // User is not registered, register and log in the user
 
             // Construct user directory path
-            snprintf(userDir, sizeof(userDir), "AS/USERS/%s", UID);
+            snprintf(userDir, sizeof(userDir), "DB/USERS/%s", UID);
             // Create user directory
             if(createDirectory(userDir) == -1){
                 snprintf(response, MAX_UDP_REPLY_BUFFER_SIZE, "RLI NOK\n");
@@ -974,10 +936,10 @@ void handleOpenAuctionRequest(char *request, char *response) {
         int AID = newAIDdirectory();
         if (AID != -1) {
             char AIDdirectory[100];
-            snprintf(AIDdirectory, sizeof(AIDdirectory), "AS/AUCTIONS/%03d", AID); // MAX_AID_SIZE
+            snprintf(AIDdirectory, sizeof(AIDdirectory), "DB/AUCTIONS/%03d", AID); // MAX_AID_SIZE
             // Create START file
             char startFilePath[100];
-            snprintf(startFilePath, sizeof(startFilePath), "AS/AUCTIONS/%03d/START.txt", AID); // MAX_AID_SIZE
+            snprintf(startFilePath, sizeof(startFilePath), "DB/AUCTIONS/%03d/START.txt", AID); // MAX_AID_SIZE
             FILE *startFile = fopen(startFilePath, "w");
             if (startFile != NULL) {
                 // Get the current time
@@ -996,7 +958,7 @@ void handleOpenAuctionRequest(char *request, char *response) {
             }
             // Create asset file
             char assetFilePath[100];
-            snprintf(assetFilePath, sizeof(assetFilePath), "AS/AUCTIONS/%03d/%s", AID, Fname); // MAX_AID_SIZE
+            snprintf(assetFilePath, sizeof(assetFilePath), "DB/AUCTIONS/%03d/%s", AID, Fname); // MAX_AID_SIZE
             if(writeFile(assetFilePath, Fdata) == -1){
                 snprintf(response, MAX_TCP_REPLY_BUFFER_SIZE, "NOK\n");
                 delete_directory(AIDdirectory);
@@ -1005,7 +967,7 @@ void handleOpenAuctionRequest(char *request, char *response) {
 
             // Create BIDS directory
             char bidsDir[50];
-            snprintf(bidsDir, sizeof(bidsDir), "AS/AUCTIONS/%03d/BIDS", AID); // MAX_AID_SIZE
+            snprintf(bidsDir, sizeof(bidsDir), "DB/AUCTIONS/%03d/BIDS", AID); // MAX_AID_SIZE
             if(createDirectory(bidsDir) == -1){
                 snprintf(response, MAX_TCP_REPLY_BUFFER_SIZE, "NOK\n");
                 delete_directory(AIDdirectory);
@@ -1014,7 +976,7 @@ void handleOpenAuctionRequest(char *request, char *response) {
 
             // Create an empty file in the UID's HOSTED directory with the AID as the filename
             char hostedDir[50];
-            snprintf(hostedDir, sizeof(hostedDir), "AS/USERS/%s/HOSTED", UID);
+            snprintf(hostedDir, sizeof(hostedDir), "DB/USERS/%s/HOSTED", UID);
             if(createDirectory(hostedDir) == -1){
                 snprintf(response, MAX_TCP_REPLY_BUFFER_SIZE, "NOK\n");
                 delete_directory(AIDdirectory);
@@ -1104,9 +1066,9 @@ void handleMyAuctionsRequest(char* request, char* response) {
 
         for (int i = 0; i < 2; i++) {
             if (i == 0) {
-                snprintf(Dir, sizeof(Dir), "AS/USERS/%s/HOSTED", UID);
+                snprintf(Dir, sizeof(Dir), "DB/USERS/%s/HOSTED", UID);
             } else {
-                snprintf(Dir, sizeof(Dir), "AS/USERS/%s/BIDDED", UID);
+                snprintf(Dir, sizeof(Dir), "DB/USERS/%s/BIDDED", UID);
             }
             DIR* DirPtr = opendir(Dir);
 
@@ -1157,7 +1119,7 @@ void handleMyBidsRequest(char* request, char* response) {
         char Dir[50];
         struct dirent* entry;
 
-        snprintf(Dir, sizeof(Dir), "AS/USERS/%s/BIDDED", UID);
+        snprintf(Dir, sizeof(Dir), "DB/USERS/%s/BIDDED", UID);
         // Open the BIDDED directory
         DIR* DirPtr = opendir(Dir);
         if (DirPtr != NULL) {
@@ -1201,7 +1163,7 @@ void handleListAuctionsRequest(char* response) {
     snprintf(response, MAX_UDP_REPLY_BUFFER_SIZE, "RLS OK");
     
     // Open the AUCTIONS directory
-    DIR* DirPtr = opendir("AS/AUCTIONS");
+    DIR* DirPtr = opendir("DB/AUCTIONS");
 
     if (DirPtr != NULL) {
         struct dirent* entry;
@@ -1238,7 +1200,7 @@ void handleShowAssetRequest(char* request, char* response) {
     int AID = atoi(AID_str);
 
     char auctionDir[50];
-    snprintf(auctionDir, sizeof(auctionDir), "AS/AUCTIONS/%03d", AID); // MAX_AID_SIZE
+    snprintf(auctionDir, sizeof(auctionDir), "DB/AUCTIONS/%03d", AID); // MAX_AID_SIZE
 
     char startFilePath[100];
     snprintf(startFilePath, sizeof(startFilePath), "%s/START.txt", auctionDir);
@@ -1308,7 +1270,7 @@ void handleBidRequest(char* request, char* response) {
             if (!auctionOwnedByUser(AID, UID)){
                 //obtain the start_value from the START file
                 char startFilePath[100];
-                snprintf(startFilePath, sizeof(startFilePath), "AS/AUCTIONS/%03d/START.txt", AID); // MAX_AID_SIZE
+                snprintf(startFilePath, sizeof(startFilePath), "DB/AUCTIONS/%03d/START.txt", AID); // MAX_AID_SIZE
                 FILE *startFile = fopen(startFilePath, "r");
                 if (startFile != NULL) {
                     int start_value;
@@ -1325,15 +1287,14 @@ void handleBidRequest(char* request, char* response) {
                             // Bid accepted
                             // Writes bid contents
                             char bidFilePath[100];
-                            snprintf(bidFilePath, sizeof(bidFilePath), "AS/AUCTIONS/%03d/BIDS/%06d.txt", AID, value); // MAX_BID_SIZE
+                            snprintf(bidFilePath, sizeof(bidFilePath), "DB/AUCTIONS/%03d/BIDS/%06d.txt", AID, value); // MAX_BID_SIZE
                             // Get the current date and time
                             char currentDateTime[20];
                             getCurrentDateTime(currentDateTime);
-                            time_t now = time(NULL);
                             char content[100];
                             char startFilePath[100];
                             int elapsedTime;
-                            snprintf(startFilePath, sizeof(startFilePath), "AS/AUCTIONS/%03d/START.txt", AID); // MAX_AID_SIZE
+                            snprintf(startFilePath, sizeof(startFilePath), "DB/AUCTIONS/%03d/START.txt", AID); // MAX_AID_SIZE
                             FILE *startFile = fopen(startFilePath, "r");
                             if (startFile != NULL) {
                                 time_t creationTime;
@@ -1352,7 +1313,7 @@ void handleBidRequest(char* request, char* response) {
                             }
                             // Writes bid in user BIDDED directory
                             char bidDir[50];
-                            snprintf(bidDir, sizeof(bidDir), "AS/USERS/%s/BIDDED", UID);
+                            snprintf(bidDir, sizeof(bidDir), "DB/USERS/%s/BIDDED", UID);
                             char bidFilename[50];
                             snprintf(bidFilename, sizeof(bidFilename), "%03d.txt", AID); // MAX_AID_SIZE
                             if(createFile(bidDir, bidFilename) == -1){
@@ -1401,7 +1362,7 @@ void handleShowRecordRequest(char* request, char* response) {
     int AID = atoi(AID_str);
 
     char auctionDir[50];
-    snprintf(auctionDir, sizeof(auctionDir), "AS/AUCTIONS/%03d", AID); // MAX_AID_SIZE
+    snprintf(auctionDir, sizeof(auctionDir), "DB/AUCTIONS/%03d", AID); // MAX_AID_SIZE
     
     char startFilePath[100];
     snprintf(startFilePath, sizeof(startFilePath), "%s/START.txt", auctionDir);
@@ -1491,7 +1452,7 @@ void handleLogoutRequest(char* request, char* response) {
         if (validation == VALID_USER) {
             // User is logged out
             char userDir[50];
-            snprintf(userDir, sizeof(userDir), "AS/USERS/%s", UID);
+            snprintf(userDir, sizeof(userDir), "DB/USERS/%s", UID);
             char filename[50];
             snprintf(filename, sizeof(filename), "%s_login.txt", UID);
             char filePath[100];
@@ -1535,7 +1496,7 @@ void handleUnregisterRequest(char* request, char* response) {
             // User exists and password is correct, unregister the user
             // Delete password file
             char userDir[50];
-            snprintf(userDir, sizeof(userDir), "AS/USERS/%s", UID);
+            snprintf(userDir, sizeof(userDir), "DB/USERS/%s", UID);
             char filename[50];
             snprintf(filename, sizeof(filename), "%s_pass.txt", UID);
             char filePath[100];
@@ -1570,3 +1531,5 @@ void handleUnregisterRequest(char* request, char* response) {
         return;
     }
 }
+
+
