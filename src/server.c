@@ -788,15 +788,18 @@ int auctionState(int AID) {
                 time_t now = time(NULL);
                 if (creationTime + timeactive < now) {
                     if (closeAuction(AID)  == -1) {
+                        printf("estou aqui 1\n");
                         return -1;
                     }
                     return 0;
                 }
             }else{
                 fclose(startFile);
+                printf("estou aqui 2\n");
                 return -1;
             }
         }else{
+            printf("estou aqui 3\n");
             return -1;
         }
     }
@@ -1211,7 +1214,9 @@ void handleListAuctionsRequest(char* response) {
             if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
                 char* AID_str = entry->d_name;
                 int AID = atoi(AID_str);
+                printf("AID: %d\n", AID);
                 int state = auctionState(AID);
+                printf("STATE: %d\n", state);
                 if(state == -1){
                     snprintf(response, MAX_UDP_REPLY_BUFFER_SIZE, "RLS NOK\n");
                     return;
@@ -1326,13 +1331,25 @@ void handleBidRequest(char* request, char* response) {
                             // Bid accepted
                             // Writes bid contents
                             char bidFilePath[100];
-                            snprintf(bidFilePath, sizeof(bidFilePath), "AS/AUCTIONS/%03d/%06d.txt", AID, value); // MAX_BID_SIZE
+                            snprintf(bidFilePath, sizeof(bidFilePath), "AS/AUCTIONS/%03d/BIDS/%06d.txt", AID, value); // MAX_BID_SIZE
                             // Get the current date and time
                             char currentDateTime[20];
                             getCurrentDateTime(currentDateTime);
                             time_t now = time(NULL);
-                            char content[50];
-                            snprintf(content, sizeof(content), "%s %d %s %ld", UID, value, currentDateTime, (long)now);
+                            char content[100];
+                            char startFilePath[100];
+                            int elapsedTime;
+                            snprintf(startFilePath, sizeof(startFilePath), "AS/AUCTIONS/%03d/START.txt", AID); // MAX_AID_SIZE
+                            FILE *startFile = fopen(startFilePath, "r");
+                            if (startFile != NULL) {
+                                time_t creationTime;
+                                if (fscanf(startFile, "%*s %*s %*s %*d %*d %*s %*s %ld", &creationTime) == 1) {
+                                    fclose(startFile);
+                                    time_t now = time(NULL);
+                                     elapsedTime = (int)difftime(now, creationTime);
+                                }
+                            }
+                            snprintf(content, sizeof(content), "%s %d %s %d", UID, value, currentDateTime, elapsedTime);
                             if (writeFile(bidFilePath, content) == -1) {
                                 // Error handling the new bid
                                 snprintf(response, MAX_TCP_REPLY_BUFFER_SIZE, "RBD NOK\n");
@@ -1385,9 +1402,10 @@ void handleBidRequest(char* request, char* response) {
     }
 }
 
-void handleShowRecordRequest(char* request, char* response) { //TODO: not very well chcked came from chatGPT, não sei como vai funcionar mandar a a mensagems e o protocolo tem \n e é suposto acabar em \n
+void handleShowRecordRequest(char* request, char* response) {
     char* AID_str = strtok(request, " ");
     int AID = atoi(AID_str);
+    printf("AID: %d", AID);
 
     char auctionDir[50];
     snprintf(auctionDir, sizeof(auctionDir), "AS/AUCTIONS/%03d", AID); // MAX_AID_SIZE
@@ -1407,7 +1425,7 @@ void handleShowRecordRequest(char* request, char* response) { //TODO: not very w
         // Prepare the initial response
         char currentDateTime[20];
         getCurrentDateTime(currentDateTime);
-        snprintf(response, MAX_UDP_REPLY_BUFFER_SIZE, "RRC OK %s %s %s %d %s %d", host_UID, auction_name, asset_fname, start_value, currentDateTime, timeactive);
+        snprintf(response, MAX_UDP_REPLY_BUFFER_SIZE, "RRC OK %s %s %s %d %s %d ", host_UID, auction_name, asset_fname, start_value, currentDateTime, timeactive);
 
         // Check if the auction has received bids
         char bidsDir[100];
@@ -1425,30 +1443,34 @@ void handleShowRecordRequest(char* request, char* response) { //TODO: not very w
                     FILE* bidFile = fopen(bidFilePath, "r");
                     if (bidFile != NULL) {
                         char bidder_UID[UID_SIZE];
-                        char bid_date_time[20];
+                        char bid_date[20];
+                        char bid_time[20];
                         int bid_sec_time;
-                        fscanf(bidFile, "%s %d %s %d", bidder_UID, &bid_value, bid_date_time, &bid_sec_time);
+                        fscanf(bidFile, "%s %d %s %s %d", bidder_UID, &bid_value, bid_date, bid_time, &bid_sec_time);
                         fclose(bidFile);
 
                         // Append bid information to the response
-                        snprintf(response + strlen(response), MAX_UDP_REPLY_BUFFER_SIZE - strlen(response), "B %s %d %s %d", bidder_UID, bid_value, bid_date_time, bid_sec_time);
+                        snprintf(response + strlen(response), MAX_UDP_REPLY_BUFFER_SIZE - strlen(response), "B %s %d %s %s %d ", bidder_UID, bid_value, bid_date, bid_time, bid_sec_time);
                     }
                 }
             }
             closedir(bidsDirPtr);
         }
-        if(auctionState(AID) == 0){
+        int state = auctionState(AID);
+        //if(state == 0){
+        if(state != 1){ //TODO o state aqui esta a dar sempre -1, mas só aqui not sure why mas assim está a funcionar
             char endFilePath[100];
             snprintf(endFilePath, sizeof(endFilePath), "%s/END.txt", auctionDir);
             if (fileExists(endFilePath)) {
-                char end_date_time[20];
+                char end_date[20];
+                char end_time[20];
                 int end_sec_time;
                 FILE* endFile = fopen(endFilePath, "r");
                 if (endFile != NULL) {
-                    fscanf(endFile, "%s %d", end_date_time, &end_sec_time);
+                    fscanf(endFile, "%s %s %d", end_date, end_time, &end_sec_time);
                     fclose(endFile);
                     // Append closing information to the response
-                    snprintf(response + strlen(response), MAX_UDP_REPLY_BUFFER_SIZE - strlen(response), "E %s %d", end_date_time, end_sec_time);
+                    snprintf(response + strlen(response), MAX_UDP_REPLY_BUFFER_SIZE - strlen(response), "E %s %s %d", end_date, end_time, end_sec_time);
                 }
             }
         }
