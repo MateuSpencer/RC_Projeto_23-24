@@ -1,5 +1,5 @@
 #include "common.h"
-/*
+
 int createUDPSocket() {
     int udpSocket = socket(AF_INET, SOCK_DGRAM, 0);
     if (udpSocket == -1) {
@@ -17,4 +17,3 @@ int createTCPSocket() {
     }
     return tcpSocket;
 }
-*/
