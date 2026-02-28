@@ -1,8 +1,11 @@
-# RC_Projeto_23-24
- 
+# Computer Networks — Auction System
+
+**Course:** Computer Networks (Redes de Computadores) — IST, University of Lisbon
+**Year:** 2023/2024
+
 ## Description
 
-This project is a server-client application written in C. It allows users to interact with assets and auctions, with functionalities such as bidding, listing auctions, and showing assets.
+A **client-server auction system** implemented in C, supporting both **UDP and TCP** protocols. Users can create auctions, upload assets, place bids, and manage their accounts through a command-line interface.
 
 ## Directory Structure
 
